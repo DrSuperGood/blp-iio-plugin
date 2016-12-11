@@ -29,7 +29,7 @@ public final class BLPIndexColorModel extends ColorModel {
 	 * Internal DirectColorModel to decode BLP pixels into components.
 	 */
 	protected final DirectColorModel indexedColorModel;
-	
+
 	/**
 	 * Color map for indexed color. In form of BLP_DIRECT_CM.
 	 */
@@ -42,11 +42,11 @@ public final class BLPIndexColorModel extends ColorModel {
 	 * choosing a color index which is why sRGB is used.
 	 */
 	private float[] normalizedComponentCache = null;
-	
+
 	private static int resolveTransparency(int alphaBits) {
 		if (alphaBits == 0) {
 			return Transparency.OPAQUE;
-		} else if(alphaBits == 1) {
+		} else if (alphaBits == 1) {
 			return Transparency.BITMASK;
 		}
 		return Transparency.TRANSLUCENT;
@@ -64,24 +64,24 @@ public final class BLPIndexColorModel extends ColorModel {
 	 *            alpha component precision in bits.
 	 */
 	public BLPIndexColorModel(int[] cmap, int alphaBits) {
-		//super(8 + alphaBits, alphaBits);
-		super(8 + alphaBits, alphaBits == 0 ? new int[] { 8, 8, 8 } : new int[] { 8, 8,
-				8, alphaBits }, ColorSpace
+		// super(8 + alphaBits, alphaBits);
+		super(8 + alphaBits, alphaBits == 0 ? new int[] { 8, 8, 8 }
+				: new int[] { 8, 8, 8, alphaBits }, ColorSpace
 				.getInstance(ColorSpace.CS_LINEAR_RGB), alphaBits != 0, false,
-						resolveTransparency(alphaBits), DataBuffer.TYPE_BYTE);
+				resolveTransparency(alphaBits), DataBuffer.TYPE_BYTE);
 
 		indexedColorModel = new DirectColorModel(
 				ColorSpace.getInstance(ColorSpace.CS_LINEAR_RGB),
 				24 + alphaBits, 0x00FF0000, 0x0000FF00, 0x000000FF,
 				(1 << alphaBits) - 1 << 24, false, DataBuffer.TYPE_INT);
-		
+
 		// validate arguments
 		if (!BLPEncodingType.INDEXED.isAlphaBitsValid(alphaBits))
-			throw new IllegalArgumentException(
-					"Unsupported alphaBits.");
-		else if(cmap.length != INDEXED_PALETTE_SIZE) {
-			throw new IllegalArgumentException(
-					String.format("Parameter cmap must have exactly %d indices.", INDEXED_PALETTE_SIZE));
+			throw new IllegalArgumentException("Unsupported alphaBits.");
+		else if (cmap.length != INDEXED_PALETTE_SIZE) {
+			throw new IllegalArgumentException(String.format(
+					"Parameter cmap must have exactly %d indices.",
+					INDEXED_PALETTE_SIZE));
 		}
 
 		colorMap = cmap.clone();
@@ -118,8 +118,8 @@ public final class BLPIndexColorModel extends ColorModel {
 			// normalize pixel
 			int pixel = getIndexedColor((byte) i);
 			indexedColorModel.getNormalizedComponents(
-					indexedColorModel.getComponents(pixel, componentCache, 0), 0,
-					normalizedComponentCache, offset);
+					indexedColorModel.getComponents(pixel, componentCache, 0),
+					0, normalizedComponentCache, offset);
 
 			// translate color components to sRGB
 			float[] lrgbComponents = Arrays.copyOfRange(
@@ -225,7 +225,8 @@ public final class BLPIndexColorModel extends ColorModel {
 		int pixel = getBestIndex(normComponents, normOffset) & 0xFF;
 
 		if (hasAlpha())
-			pixel |= ((indexedColorModel.getDataElement(normComponents, normOffset) >> 24) & 0xFF) << 8;
+			pixel |= ((indexedColorModel.getDataElement(normComponents,
+					normOffset) >> 24) & 0xFF) << 8;
 
 		return pixel;
 	}
@@ -254,8 +255,8 @@ public final class BLPIndexColorModel extends ColorModel {
 				indexedColorModel.getNormalizedComponents(rgbpixel, null, 0), 0);
 
 		if (hasAlpha())
-			bytepixel[1] = (byte) indexedColorModel
-					.getComponents(rgbpixel, null, 0)[getNumColorComponents()];
+			bytepixel[1] = (byte) indexedColorModel.getComponents(rgbpixel,
+					null, 0)[getNumColorComponents()];
 
 		return pixel;
 	}
@@ -338,12 +339,14 @@ public final class BLPIndexColorModel extends ColorModel {
 
 	@Override
 	public int getGreen(int pixel) {
-		return indexedColorModel.getGreen(getIndexedColor((byte) (pixel & 0xFF)));
+		return indexedColorModel
+				.getGreen(getIndexedColor((byte) (pixel & 0xFF)));
 	}
 
 	@Override
 	public int getBlue(int pixel) {
-		return indexedColorModel.getBlue(getIndexedColor((byte) (pixel & 0xFF)));
+		return indexedColorModel
+				.getBlue(getIndexedColor((byte) (pixel & 0xFF)));
 	}
 
 	@Override
@@ -371,7 +374,7 @@ public final class BLPIndexColorModel extends ColorModel {
 					raster.getMinY(), raster.getWidth(), raster.getHeight(),
 					raster.getMinX(), raster.getMinY(), new int[] { 1 });
 		else
-			return super.getAlphaRaster(raster);
+			return null;
 	}
 
 	@Override
@@ -388,8 +391,9 @@ public final class BLPIndexColorModel extends ColorModel {
 
 	@Override
 	public SampleModel createCompatibleSampleModel(int w, int h) {
-		return new BLPIndexSampleModel(w, h,
-				indexedColorModel.getComponentSize(getNumColorComponents()));
+		return new BLPPackedSampleModel(w, h, hasAlpha() ? new int[] { 8,
+				getComponentSize(getNumColorComponents()) } : new int[] { 8 },
+				null);
 	}
 
 	@Override
@@ -415,7 +419,7 @@ public final class BLPIndexColorModel extends ColorModel {
 
 		return true;
 	}
-	
+
 	public int[] getColorMap() {
 		return colorMap.clone();
 	}

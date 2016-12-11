@@ -62,6 +62,14 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 	 */
 	private byte[] jpegHeader = null;
 
+	/**
+	 * Constructs a MipmapProcessor for JPEG content.
+	 * 
+	 * @param alphaBits
+	 *            the alpha component bits, if any.
+	 * @throws IllegalArgumentException
+	 *             if alphaBits is not valid.
+	 */
 	public JPEGMipmapProcessor(int alphaBits) {
 		if (!BLPEncodingType.JPEG.isAlphaBitsValid(alphaBits))
 			throw new IllegalArgumentException("Unsupported alphaBits.");
@@ -74,7 +82,7 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 
 	@Override
 	public byte[] encodeMipmap(BufferedImage img, ImageWriteParam param,
-			Consumer<LocalizedFormatedString> handler) throws IIOException {
+			Consumer<LocalizedFormatedString> handler) throws IOException {
 		// TODO Auto-generated method stub
 		return null;
 	}
@@ -82,7 +90,7 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 	@Override
 	public BufferedImage decodeMipmap(byte[] mmData, ImageReadParam param,
 			int width, int height, Consumer<LocalizedFormatedString> handler)
-			throws IIOException {
+			throws IOException {
 		final boolean directRead = param == null
 				|| (param instanceof BLPReadParam && ((BLPReadParam) param)
 						.isDirectRead());
@@ -92,14 +100,8 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 		if (param instanceof BLPReadParam
 				&& ((BLPReadParam) param).getJPEGSpi() != null) {
 			// use explicit JPEG reader
-			try {
-				jpegReader = ((BLPReadParam) param).getJPEGSpi()
-						.createReaderInstance();
-			} catch (IOException e) {
-				throw new IIOException(
-						"Exception throw during creation of explicit JPEG ImageReader: "
-								+ e.getMessage());
-			}
+			jpegReader = ((BLPReadParam) param).getJPEGSpi()
+					.createReaderInstance();
 		} else {
 			// find a JPEG reader
 			Iterator<ImageReader> jpegReaders = ImageIO
@@ -131,6 +133,8 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 		InputStream bis = new ByteArrayInputStream(jpegBuffer);
 		ImageInputStream iis = new MemoryCacheImageInputStream(bis);
 		jpegReader.setInput(iis, true, true);
+
+		// read source raster
 		jpegReader.addIIOReadWarningListener(new IIOReadWarningListener() {
 			@Override
 			public void warningOccurred(ImageReader source, String warning) {
@@ -138,35 +142,31 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 						"com.hiveworkshop.text.blp", "JPEGWarning", warning));
 			}
 		});
-
-		// prepare source raster
 		ImageReadParam jpegParam = jpegReader.getDefaultReadParam();
 		jpegParam.setSourceBands(JPEG_BAND_ARRAY);
 		if (directRead) {
 			// optimizations to improve direct read mode performance
 			jpegParam.setSourceRegion(new Rectangle(width, height));
 		}
-		Raster srcRaster;
-		try {
-			srcRaster = jpegReader.readRaster(0, jpegParam);
-		} catch (IOException e) {
-			throw new IIOException(
-					"Exception throw during reading of JPEG raster: "
-							+ e.getMessage());
-		}
+		Raster srcRaster = jpegReader.readRaster(0, jpegParam);
+		
+		// cleanup
+		iis.close();
+		jpegReader.dispose();
 
 		// direct read shortcut
 		if (directRead && srcRaster instanceof WritableRaster
 				&& srcRaster.getWidth() == width
 				&& srcRaster.getHeight() == height) {
 			WritableRaster destRaster = (WritableRaster) srcRaster;
-			
+
 			// enforce alpha band to match color model
 			if (!jpegBLPColorModel.hasAlpha())
-				destRaster = destRaster.createWritableChild(0, 0, destRaster.getWidth(), destRaster.getHeight(), 0, 0, new int[] {0, 1, 2});
-			
-			return new BufferedImage(jpegBLPColorModel,
-					destRaster, false, null);
+				destRaster = destRaster.createWritableChild(0, 0,
+						destRaster.getWidth(), destRaster.getHeight(), 0, 0,
+						new int[] { 0, 1, 2 });
+
+			return new BufferedImage(jpegBLPColorModel, destRaster, false, null);
 		}
 
 		// alpha warning check
@@ -182,7 +182,7 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 				}
 			}
 		}
-		
+
 		// dimension check warning
 		if (srcRaster.getWidth() != width || srcRaster.getHeight() != height)
 			handler.accept(new LocalizedFormatedString(
@@ -227,6 +227,7 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 		src.readFully(jpegh, 0, jpegh.length);
 
 		jpegHeader = jpegh;
+		canDecode = true;
 	}
 
 	@Override

@@ -13,12 +13,11 @@ import javax.imageio.stream.ImageInputStream;
 import com.hiveworkshop.lang.MagicInt;
 
 /**
- * Service provider for reading BLP image files.
+ * Service provider for BLP texture file ImageReader.
  * 
- * @author ImperialGood
- *
+ * @author Imperial Good
  */
-public class BLPReaderProvider extends ImageReaderSpi {
+public class BLPReaderSpi extends ImageReaderSpi {
 
 	// format specification should be moved to a common class when a writer is
 	// implemented
@@ -44,7 +43,7 @@ public class BLPReaderProvider extends ImageReaderSpi {
 	private static final String[] extraImageMetadataFormatNames = null;
 	private static final String[] extraImageMetadataFormatClassNames = null;
 
-	public BLPReaderProvider() {
+	public BLPReaderSpi() {
 		super(vendorName, version, names, suffixes, MIMETypes, readerClassName,
 				inputTypes, writerSpiNames,
 				supportsStandardStreamMetadataFormat,

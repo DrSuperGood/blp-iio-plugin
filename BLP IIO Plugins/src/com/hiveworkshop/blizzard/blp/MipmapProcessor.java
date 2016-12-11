@@ -3,6 +3,7 @@ package com.hiveworkshop.blizzard.blp;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.List;
 import java.util.function.Consumer;
 
 import javax.imageio.IIOException;
@@ -25,6 +26,51 @@ import com.hiveworkshop.lang.LocalizedFormatedString;
  * @author Imperial Good
  */
 abstract class MipmapProcessor {
+	/**
+	 * Set by subclasses when the MipmapProcessor is ready to call decodeMipmap.
+	 */
+	protected boolean canDecode = false;
+
+	/**
+	 * Determines whether this MipmapProcessor requires encoded mipmaps to be
+	 * post processed.
+	 * <p>
+	 * If true then all encoded mipmap data must be passed through
+	 * postProcessMipmapData once all mipmap levels have been encoded. If false
+	 * then then encoded mipmap data can be further used as is.
+	 * <p>
+	 * Default assumes false.
+	 * 
+	 * @return if postProcessMipmapData must be called once all encoding is
+	 *         complete.
+	 */
+	public boolean mustPostProcess() {
+		return false;
+	}
+
+	/**
+	 * Post processes encoded mipmap data, allowing it to be decoded.
+	 * <p>
+	 * The order which the mipmap data is provided does not matter. The List
+	 * returned can be the same as the input and the mipmap data might not be
+	 * modified. The ordering of mipmap data in the output List is not changed.
+	 * <p>
+	 * If mustFinalize is true then after calling successfully canDecode will be
+	 * true.
+	 * <p>
+	 * Default returns the input unchanged.
+	 * 
+	 * @param encodedMmData
+	 *            unprocessed mipmap data arrays.
+	 * @return list of processed mipmap data.
+	 * @throws IllegalArgumentException
+	 *             if encodedmmData does not contain at least 1 element.
+	 */
+	public List<byte[]> postProcessMipmapData(List<byte[]> encodedMmData) {
+		if (encodedMmData.size() < 1)
+			throw new IllegalArgumentException("No mipmap data.");
+		return encodedMmData;
+	}
 
 	/**
 	 * Encodes an image into mipmap data.
@@ -35,20 +81,32 @@ abstract class MipmapProcessor {
 	 * <p>
 	 * It is assumed the input image is the correct size. No clipping or
 	 * subsampling is performed.
+	 * <p>
+	 * If mustFinalize is false then after calling successfully canDecode will
+	 * be true.
 	 * 
 	 * @param img
 	 *            input image to encode.
 	 * @param param
-	 *            image write parameter to control encode behaviour.
+	 *            image write parameter to control encode behavior.
 	 * @param handler
 	 *            warning handler.
 	 * @return encoded mipmap data.
 	 * @throws IIOException
-	 *             in an image cannot be encoded.
+	 *             if an image cannot be encoded.
 	 */
 	public abstract byte[] encodeMipmap(BufferedImage img,
 			ImageWriteParam param, Consumer<LocalizedFormatedString> handler)
-			throws IIOException;
+			throws IOException;
+
+	/**
+	 * Determines whether this MipmapProcessor can call
+	 * 
+	 * @return
+	 */
+	public final boolean canDecode() {
+		return canDecode;
+	}
 
 	/**
 	 * Decodes mipmap data into an image.
@@ -63,6 +121,9 @@ abstract class MipmapProcessor {
 	 * band values of 0.
 	 * <p>
 	 * No clipping or subsampling is performed.
+	 * <p>
+	 * Calling when canDecode is false results in unspecified behavior, usually
+	 * an exception.
 	 * 
 	 * @param mmData
 	 *            the mipmap data to decode.
@@ -80,19 +141,21 @@ abstract class MipmapProcessor {
 	 */
 	public abstract BufferedImage decodeMipmap(byte[] mmData,
 			ImageReadParam param, int width, int height,
-			Consumer<LocalizedFormatedString> handler) throws IIOException;
+			Consumer<LocalizedFormatedString> handler) throws IOException;
 
 	/**
 	 * Am iterator of the image types supported by this processor.
 	 * <p>
 	 * The types in the iterator can be used to both encode and decode mipmaps.
+	 * 
 	 * @param width
 	 *            the width of the image in pixels.
 	 * @param height
 	 *            the height of the image in pixels.
 	 * @return iterator of supported image types.
 	 */
-	public abstract Iterator<ImageTypeSpecifier> getSupportedImageTypes(int width, int height);
+	public abstract Iterator<ImageTypeSpecifier> getSupportedImageTypes(
+			int width, int height);
 
 	public abstract void readObject(ImageInputStream src) throws IOException;
 

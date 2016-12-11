@@ -21,7 +21,6 @@ import javax.imageio.stream.ImageInputStream;
 
 import com.hiveworkshop.lang.LocalizedFormatedString;
 
-
 /**
  * Implementation class for the BLP image reader.
  * <p>
@@ -233,7 +232,8 @@ public class BLPReader extends ImageReader {
 				intSrc.close();
 			} catch (IOException e) {
 				processWarningOccurred(new LocalizedFormatedString(
-						"com.hiveworkshop.text.blp", "IISCloseFail", e.getMessage()));
+						"com.hiveworkshop.text.blp", "IISCloseFail",
+						e.getMessage()));
 			}
 			intSrc = null;
 		}
@@ -319,6 +319,9 @@ public class BLPReader extends ImageReader {
 			minIndex = imageIndex;
 			mipmapReader.flushTo(minIndex);
 		}
+
+		if (!mipmapProcessor.canDecode())
+			throw new IIOException("Mipmap processor cannot decode.");
 
 		processImageStarted(imageIndex);
 

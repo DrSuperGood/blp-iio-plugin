@@ -1,4 +1,4 @@
-# blp-iio-plugin
+# BLP IIO Plugins
 A Java Image IO plugin for BLP texture files used in games like Warcraft III and World of Warcraft.
 
 The BLP file format, extension ".blp", was created by Blizzard Entertainment for games like Warcraft III and World of Warcraft to hold texture assets used for the graphics. There exists 3 versions of the format, BLP0 being used by the Warcraft III Reign of Chaos beta, BLP1 by all released versions of Warcraft III and BLP2 by World of Warcraft.
@@ -11,11 +11,10 @@ Although other BLP library implementations existed for the Java programming lang
 
 Provided is a light weight highly compliant IIO plugin for a ImageReader to read from BLP files. BLP0 files can be read by providing either a File or Path object to the .blp file. BLP1 files can be read like most standard image formats. BLP files may contain multiple images, each image representing a mipmap level. To use all one has to is build a JAR using Eclipse and place it in the path of a Java program and the plugin will automatically be used. Since it is based on the IIO API of standard Java even existing Java programs can take advantage of the plugin without needing to be rebuilt.
 
-The following standard Java will create a BufferedImage from a BLP file.
-
-File blpFile = new File(...);
-
-BufferedImage img = ImageIO.read(blpFile);
+The following standard Java will create a BufferedImage from a BLP file... 
+ 
+	File blpFile = new File(...);
+	BufferedImage img = ImageIO.read(blpFile);
   
 The produced BufferedImage is intended for accurate reproduction of BLP file content and not performance. It is recommended to convert to a native BufferedImage format if performing any serious processing or when speed is important. The BufferedImage is always in a linear RGB color space, matching how the textures are loaded and processed. Conversion from a linear RGB to sRGB is up to the programmer.
 
