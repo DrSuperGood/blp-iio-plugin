@@ -22,9 +22,15 @@ import static com.hiveworkshop.blizzard.blp.BLPCommon.INDEXED_PALETTE_SIZE;
  * to determine pixel color. The underlying Raster uses 8 bit samples for index
  * with appropriately sized samples for alpha.
  * 
- * @author ImperialGood
+ * @author Imperial Good
  */
 public final class BLPIndexColorModel extends ColorModel {
+	/**
+	 * Default color map used if no color map is specified. Currently all 0
+	 * values.
+	 */
+	private final int[] DEFAULT_COLOR_MAP = new int[INDEXED_PALETTE_SIZE];
+
 	/**
 	 * Internal DirectColorModel to decode BLP pixels into components.
 	 */
@@ -34,6 +40,13 @@ public final class BLPIndexColorModel extends ColorModel {
 	 * Color map for indexed color. In form of BLP_DIRECT_CM.
 	 */
 	private final int[] colorMap;
+
+	/**
+	 * The ColorModel used by the color map indices.
+	 */
+	public final static ColorModel CMAP_COLORMODEL = new DirectColorModel(
+			ColorSpace.getInstance(ColorSpace.CS_LINEAR_RGB), 24, 0x00FF0000,
+			0x0000FF00, 0x000000FF, 0, false, DataBuffer.TYPE_INT);
 
 	/**
 	 * Normalized component cache for the colorMap colors converted into sRGB
@@ -54,7 +67,9 @@ public final class BLPIndexColorModel extends ColorModel {
 
 	/**
 	 * Constructs a BLP indexed ColorModel from a BLP color map array. Up to the
-	 * first 256 indices will be used. Each index is in the form of 0xRRGGBB.
+	 * first 256 indices will be used. Each index is in the form of 0xBBGGRR.
+	 * <p>
+	 * A cmap of null will allocate a pure black color map.
 	 * <p>
 	 * Alpha bits means alpha channel precision. Valid values are 0, 1, 4 and 8.
 	 * 
@@ -70,21 +85,19 @@ public final class BLPIndexColorModel extends ColorModel {
 				.getInstance(ColorSpace.CS_LINEAR_RGB), alphaBits != 0, false,
 				resolveTransparency(alphaBits), DataBuffer.TYPE_BYTE);
 
+		// validate arguments
+		if (!BLPEncodingType.INDEXED.isAlphaBitsValid(alphaBits))
+			throw new IllegalArgumentException("Unsupported alphaBits.");
+
 		indexedColorModel = new DirectColorModel(
 				ColorSpace.getInstance(ColorSpace.CS_LINEAR_RGB),
 				24 + alphaBits, 0x00FF0000, 0x0000FF00, 0x000000FF,
 				(1 << alphaBits) - 1 << 24, false, DataBuffer.TYPE_INT);
 
-		// validate arguments
-		if (!BLPEncodingType.INDEXED.isAlphaBitsValid(alphaBits))
-			throw new IllegalArgumentException("Unsupported alphaBits.");
-		else if (cmap.length != INDEXED_PALETTE_SIZE) {
-			throw new IllegalArgumentException(String.format(
-					"Parameter cmap must have exactly %d indices.",
-					INDEXED_PALETTE_SIZE));
-		}
-
-		colorMap = cmap.clone();
+		if (cmap != null)
+			colorMap = Arrays.copyOf(cmap, INDEXED_PALETTE_SIZE);
+		else
+			colorMap = DEFAULT_COLOR_MAP;
 	}
 
 	/**

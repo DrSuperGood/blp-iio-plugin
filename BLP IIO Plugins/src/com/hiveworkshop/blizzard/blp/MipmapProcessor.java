@@ -60,27 +60,33 @@ abstract class MipmapProcessor {
 	 * <p>
 	 * Default returns the input unchanged.
 	 * 
-	 * @param encodedMmData
+	 * @param mmDataList
 	 *            unprocessed mipmap data arrays.
+	 * @param handler
+	 *            warning handler.
 	 * @return list of processed mipmap data.
 	 * @throws IllegalArgumentException
 	 *             if encodedmmData does not contain at least 1 element.
 	 */
-	public List<byte[]> postProcessMipmapData(List<byte[]> encodedMmData) {
-		if (encodedMmData.size() < 1)
+	public List<byte[]> postProcessMipmapData(List<byte[]> mmDataList,
+			Consumer<LocalizedFormatedString> handler) {
+		if (mmDataList.size() < 1)
 			throw new IllegalArgumentException("No mipmap data.");
-		return encodedMmData;
+		return mmDataList;
 	}
 
 	/**
 	 * Encodes an image into mipmap data.
 	 * <p>
-	 * The input image should be of a type contained in ImageTypeSpecifier.
-	 * Other image types might have a best effort attempt to encode but there is
-	 * no guarantee of meaningful success.
+	 * The input image should use similar SampleModel and ColorModel to those
+	 * returned by getSupportedImageTypes. Other image types might have a best
+	 * effort attempt to encode but there is no guarantee of meaningful success
+	 * or accuracy.
 	 * <p>
 	 * It is assumed the input image is the correct size. No clipping or
-	 * subsampling is performed.
+	 * subsampling is performed. Input pixel data is assumed to be in a
+	 * CS_LINEAR_RGB ColorSpace with no automatic ColorSpace conversion.
+	 * Compression quality of the ImageWriteParam may apply and may be lossy.
 	 * <p>
 	 * If mustFinalize is false then after calling successfully canDecode will
 	 * be true.
@@ -113,14 +119,17 @@ abstract class MipmapProcessor {
 	 * <p>
 	 * The image produced has very strict requirements. It must be exactly the
 	 * dimensions of width and height. It must also be in the format of one of
-	 * the ImageTypeSpecifier advertised by the class.
+	 * the ImageTypeSpecifier advertised by the class. The returned image might
+	 * be backed by the mipmap data array for efficiency, hence the data it
+	 * contains should be considered final after calling.
 	 * <p>
 	 * There is no guarantee that mmData contains exactly the data needed to
 	 * fully produce an image. An attempt should be made to produce an image
 	 * from as much of the data as possible. Missing pixel data must be assigned
 	 * band values of 0.
 	 * <p>
-	 * No clipping or subsampling is performed.
+	 * No clipping or subsampling is performed. Output pixel data is assumed to
+	 * be in a CS_LINEAR_RGB ColorSpace with no automatic ColorSpace conversion.
 	 * <p>
 	 * Calling when canDecode is false results in unspecified behavior, usually
 	 * an exception.

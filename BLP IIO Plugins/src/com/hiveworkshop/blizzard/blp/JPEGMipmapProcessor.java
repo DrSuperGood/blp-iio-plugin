@@ -8,25 +8,33 @@ import java.awt.image.ColorModel;
 import java.awt.image.ComponentColorModel;
 import java.awt.image.DataBuffer;
 import java.awt.image.Raster;
+import java.awt.image.SampleModel;
 import java.awt.image.WritableRaster;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
 import java.util.function.Consumer;
 
 import javax.imageio.IIOException;
+import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReadParam;
 import javax.imageio.ImageReader;
 import javax.imageio.ImageTypeSpecifier;
 import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
 import javax.imageio.event.IIOReadWarningListener;
+import javax.imageio.event.IIOWriteWarningListener;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
 import javax.imageio.stream.MemoryCacheImageInputStream;
+import javax.imageio.stream.MemoryCacheImageOutputStream;
 
 import com.hiveworkshop.lang.LocalizedFormatedString;
 
@@ -38,9 +46,16 @@ import com.hiveworkshop.lang.LocalizedFormatedString;
  * and a warning generated. Resizing occurs on the right and bottom edges of the
  * image. Padding is transparent black.
  * <p>
+ * Some poor BLP implementations, such as used by Warcraft III 1.27, do not read
+ * and process mipmap data safely so might be able to extract a valid JPEG file
+ * from a technically corrupt file.
+ * <p>
  * Both 8 and 0 bit alpha is supported. A fully opaque alpha band is encoded
  * when set to 0 bits. When decoding 0 bit alpha and not using direct read a
- * warning is generated if the alpha channel is not fully opaque.
+ * warning is generated if the alpha channel is not fully opaque. Some poor BLP
+ * implementations, such as used by Warcraft III 1.27, can still process the
+ * dummy alpha band which can result in undesirable visual artifacts depending
+ * on use.
  * <p>
  * The JPEG ImageReader used can be controlled by a BLPReadParam. Likewise the
  * JPEG ImageWriter used can be controlled by a BLPWriteParam. Due to the use of
@@ -81,10 +96,132 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 	}
 
 	@Override
+	public boolean mustPostProcess() {
+		return true;
+	}
+
+	@Override
+	public List<byte[]> postProcessMipmapData(List<byte[]> mmDataList,
+			Consumer<LocalizedFormatedString> handler) {
+		// determine maximum shared header
+		byte[] sharedHeader = mmDataList.get(0).clone();
+		int sharedLength = sharedHeader.length;
+		final int mmDataNum = mmDataList.size();
+		for (int i = 1; i < mmDataNum; i += 1) {
+			final byte[] mmData = mmDataList.get(i);
+			for (int shared = 0; shared < sharedLength; shared += 1) {
+				if (mmData[shared] != sharedHeader[shared]) {
+					sharedLength = shared;
+					break;
+				}
+			}
+		}
+		if (mmDataNum > 1 && sharedLength < 256) {
+			handler.accept(new LocalizedFormatedString(
+					"com.hiveworkshop.text.blp", "JPEGSmallShared",
+					sharedLength));
+		}
+
+		// produce shared header
+		jpegHeader = Arrays.copyOf(sharedHeader, sharedLength);
+		canDecode = true;
+
+		if (sharedLength == 0)
+			return mmDataList;
+
+		// process mipmap data
+		List<byte[]> mmDataListOut = new ArrayList<byte[]>(mmDataNum);
+		for (int i = 1; i < mmDataNum; i += 1) {
+			final byte[] mmData = mmDataList.get(i);
+			mmDataListOut.add(Arrays.copyOfRange(mmData, sharedLength,
+					mmData.length));
+		}
+
+		return mmDataListOut;
+	}
+
+	@Override
 	public byte[] encodeMipmap(BufferedImage img, ImageWriteParam param,
 			Consumer<LocalizedFormatedString> handler) throws IOException {
-		// TODO Auto-generated method stub
-		return null;
+		// resolve a JPEG ImageWriter
+		ImageWriter jpegWriter = null;
+		// if (param instanceof BLPWriteParam
+		// && ((BLPWriteParam) param).getJPEGSpi() != null) {
+		// // use explicit JPEG reader
+		// jpegReader = ((BLPWriteParam) param).getJPEGSpi()
+		// .createWriterInstance();
+		// } else {
+		// find a JPEG reader
+		Iterator<ImageWriter> jpegWriters = ImageIO
+				.getImageWritersByFormatName("jpeg");
+		while (jpegWriters.hasNext()) {
+			final ImageWriter writer = jpegWriters.next();
+			if (writer.canWriteRasters()) {
+				jpegWriter = writer;
+				break;
+			}
+		}
+		// }
+		// validate JPEG writer
+		if (jpegWriter == null)
+			throw new IIOException("No suitable JPEG ImageWriter installed.");
+		else if (!jpegWriter.canWriteRasters()) {
+			throw new IIOException(String.format(
+					"JPEG ImageWriter cannot write raster: vendor = %s.",
+					jpegWriter.getOriginatingProvider().getVendorName()));
+		}
+
+		// prepare raster
+		final WritableRaster srcWR = img.getRaster();
+		final SampleModel srcSM = srcWR.getSampleModel();
+		final int h = srcSM.getHeight();
+		final int w = srcSM.getWidth();
+		final WritableRaster destWR = WritableRaster.createBandedRaster(
+				DataBuffer.TYPE_BYTE, w, h, JPEG_BAND_ARRAY.length, null);
+		final int srcBandN = srcSM.getSampleSize().length;
+		if (srcBandN == JPEG_BAND_ARRAY.length) {
+			destWR.setRect(srcWR);
+		} else {
+			final int bandNum = Math.min(JPEG_BAND_ARRAY.length, srcBandN);
+			final boolean opaque = !jpegBLPColorModel.hasAlpha()
+					|| bandNum < JPEG_BAND_ARRAY.length;
+			for (int y = 0; y < h; y += 1) {
+				for (int x = 0; x < w; x += 1) {
+					for (int b = 0; b < bandNum; b += 1) {
+						destWR.setSample(x, y, b, srcWR.getSample(x, y, b));
+					}
+					if (opaque)
+						destWR.setSample(x, y, 0, 255);
+				}
+			}
+		}
+
+		// prepare buffered JPEG file
+		final ByteArrayOutputStream bos = new ByteArrayOutputStream(100 << 10);
+		final ImageOutputStream ios = new MemoryCacheImageOutputStream(bos);
+		jpegWriter.setOutput(ios);
+
+		// write JPEG file
+		final ImageWriteParam jpegParam = jpegWriter.getDefaultWriteParam();
+		jpegParam.setSourceBands(JPEG_BAND_ARRAY);
+		jpegParam.setCompressionMode(param.getCompressionMode());
+		jpegParam.setCompressionQuality(param.getCompressionQuality());
+		jpegWriter.addIIOWriteWarningListener(new IIOWriteWarningListener() {
+			@Override
+			public void warningOccurred(ImageWriter source, int imageIndex,
+					String warning) {
+				handler.accept(new LocalizedFormatedString(
+						"com.hiveworkshop.text.blp", "JPEGWarning", warning));
+			}
+		});
+		jpegWriter.write(null, new IIOImage(destWR, null, null), jpegParam);
+
+		// cleanup
+		jpegWriter.dispose();
+		ios.close();
+		bos.close();
+
+		return bos.toByteArray();
 	}
 
 	@Override
@@ -149,7 +286,7 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 			jpegParam.setSourceRegion(new Rectangle(width, height));
 		}
 		Raster srcRaster = jpegReader.readRaster(0, jpegParam);
-		
+
 		// cleanup
 		iis.close();
 		jpegReader.dispose();
