@@ -323,7 +323,7 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 		// dimension check warning
 		if (srcRaster.getWidth() != width || srcRaster.getHeight() != height)
 			handler.accept(new LocalizedFormatedString(
-					"com.hiveworkshop.text.blp", "BadDimensions", srcRaster
+					"com.hiveworkshop.text.blp", "JPEGDimensionMismatch", srcRaster
 							.getWidth(), srcRaster.getHeight(), width, height));
 
 		// create destination image

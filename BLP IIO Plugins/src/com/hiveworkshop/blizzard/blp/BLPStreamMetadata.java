@@ -393,7 +393,7 @@ public final class BLPStreamMetadata extends IIOMetadata {
 	 * @return the maximum allowed dimension size.
 	 */
 	public int getDimensionMaximum() {
-		if (version < 2)
+		if (version < 1)
 			return 512;
 		return (1 << MIPMAP_MAX) - 1;
 	}
@@ -486,10 +486,26 @@ public final class BLPStreamMetadata extends IIOMetadata {
 		// read width and height
 		width = src.readInt();
 		height = src.readInt();
+
+		// validate width and height
+		final int maxDim = getDimensionMaximum();
 		if (Math.min(width, height) < 1
-				|| getDimensionMaximum() < Math.max(width, height)) {
-			throw new IIOException(String.format(
-					"Invalid image dimensions %d*%d pixels.", width, height));
+				|| maxDim < Math.max(width, height)) {
+			if (version < 1) {
+				// assumed behavior based on Warcraft III prior to 1.27b
+				throw new IIOException(String.format(
+						"Invalid image dimensions %d*%d pixels.", width, height));
+			}
+			final int oldWidth = width;
+			final int oldHeight = height;
+			
+			// clamp to maximum dimension
+			width = (int) (Math.min(width & 0xFFFFFFFFL, maxDim));
+			height = (int) (Math.min(height & 0xFFFFFFFFL, maxDim));
+			
+			warning.accept(new LocalizedFormatedString(
+					"com.hiveworkshop.text.blp", "BadDimension", oldWidth, oldHeight, width, height));
+			
 		}
 
 		if (version < 2) {
