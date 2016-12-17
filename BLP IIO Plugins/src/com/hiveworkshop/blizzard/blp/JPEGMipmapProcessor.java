@@ -131,7 +131,7 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 
 		// process mipmap data
 		List<byte[]> mmDataListOut = new ArrayList<byte[]>(mmDataNum);
-		for (int i = 1; i < mmDataNum; i += 1) {
+		for (int i = 0; i < mmDataNum; i += 1) {
 			final byte[] mmData = mmDataList.get(i);
 			mmDataListOut.add(Arrays.copyOfRange(mmData, sharedLength,
 					mmData.length));
@@ -191,7 +191,7 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 						destWR.setSample(x, y, b, srcWR.getSample(x, y, b));
 					}
 					if (opaque)
-						destWR.setSample(x, y, 0, 255);
+						destWR.setSample(x, y, 3, 255);
 				}
 			}
 		}
@@ -204,8 +204,10 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 		// write JPEG file
 		final ImageWriteParam jpegParam = jpegWriter.getDefaultWriteParam();
 		jpegParam.setSourceBands(JPEG_BAND_ARRAY);
-		jpegParam.setCompressionMode(param.getCompressionMode());
-		jpegParam.setCompressionQuality(param.getCompressionQuality());
+		if (param != null){
+			jpegParam.setCompressionMode(param.getCompressionMode());
+			jpegParam.setCompressionQuality(param.getCompressionQuality());
+		}
 		jpegWriter.addIIOWriteWarningListener(new IIOWriteWarningListener() {
 			@Override
 			public void warningOccurred(ImageWriter source, int imageIndex,
