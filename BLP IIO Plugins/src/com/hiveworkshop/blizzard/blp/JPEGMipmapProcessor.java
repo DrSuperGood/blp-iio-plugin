@@ -204,8 +204,10 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 		// write JPEG file
 		final ImageWriteParam jpegParam = jpegWriter.getDefaultWriteParam();
 		jpegParam.setSourceBands(JPEG_BAND_ARRAY);
-		if (param != null){
+		if (param != null && param.canWriteCompressed()
+				&& param.getCompressionMode() == ImageWriteParam.MODE_EXPLICIT) {
 			jpegParam.setCompressionMode(param.getCompressionMode());
+			jpegParam.setCompressionType(param.getCompressionType());
 			jpegParam.setCompressionQuality(param.getCompressionQuality());
 		}
 		jpegWriter.addIIOWriteWarningListener(new IIOWriteWarningListener() {
@@ -325,8 +327,8 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 		// dimension check warning
 		if (srcRaster.getWidth() != width || srcRaster.getHeight() != height)
 			handler.accept(new LocalizedFormatedString(
-					"com.hiveworkshop.text.blp", "JPEGDimensionMismatch", srcRaster
-							.getWidth(), srcRaster.getHeight(), width, height));
+					"com.hiveworkshop.text.blp", "JPEGDimensionMismatch",
+					srcRaster.getWidth(), srcRaster.getHeight(), width, height));
 
 		// create destination image
 		BufferedImage destImg = new BufferedImage(
