@@ -29,11 +29,12 @@ import com.hiveworkshop.lang.LocalizedFormatedString;
  * <p>
  * Default resulting BufferedImage objects may come in a variety of image types
  * based on the content of the blp file. The image type chosen aims to preserve
- * the underlying data structure. Indexed color model with separate alpha
- * channel content is not supported.
+ * the underlying data structure.
  * <p>
- * No metadata can be extracted to preserve image quality. Raster is not
- * supported.
+ * No image metadata can be extracted to preserve JPEG content image quality.
+ * <p>
+ * Raster is not supported. Read progress updates are not supported, but all
+ * other listeners work.
  * 
  * @author ImperialGood
  */

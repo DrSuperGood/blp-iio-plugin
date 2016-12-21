@@ -45,6 +45,11 @@ import com.hiveworkshop.lang.MagicInt;
  */
 public final class BLPStreamMetadata extends IIOMetadata {
 	/**
+	 * The maximum dimension size allowed by version 0 and loaded by version 1.
+	 */
+	private static final int LEGACY_MAX_DIMENSION = 512;
+
+	/**
 	 * The BLP Content type.
 	 */
 	public enum ContentType {
@@ -170,7 +175,7 @@ public final class BLPStreamMetadata extends IIOMetadata {
 	 * Image height in pixels.
 	 */
 	private int height;
-	
+
 	/**
 	 * An extra integer that is never used.
 	 */
@@ -394,7 +399,7 @@ public final class BLPStreamMetadata extends IIOMetadata {
 	 */
 	public int getDimensionMaximum() {
 		if (version < 1)
-			return 512;
+			return LEGACY_MAX_DIMENSION;
 		return (1 << MIPMAP_MAX) - 1;
 	}
 
@@ -409,12 +414,9 @@ public final class BLPStreamMetadata extends IIOMetadata {
 	 * @return the number of mipmap levels for the image.
 	 */
 	public int getMipmapCount() {
-		// number of mipmap levels based on largest image dimension
-		if (hasMipmaps)
-			return 32 - Integer.numberOfLeadingZeros(Math.max(width, height));
-
-		// only full sized image
-		return 1;
+		// if mipmaps then number of mipmap levels based on largest dimension
+		return hasMipmaps ? 32 - Integer.numberOfLeadingZeros(Math.max(width,
+				height)) : 1;
 	}
 
 	public void readObject(ImageInputStream src) throws IOException {
@@ -487,25 +489,27 @@ public final class BLPStreamMetadata extends IIOMetadata {
 		width = src.readInt();
 		height = src.readInt();
 
-		// validate width and height
+		// clamp width and height
 		final int maxDim = getDimensionMaximum();
-		if (Math.min(width, height) < 1
-				|| maxDim < Math.max(width, height)) {
+		final long widthU = width & 0xFFFFFFFFL;
+		final long heightU = height & 0xFFFFFFFFL;
+		if (Math.min(width, height) < 1 || maxDim < Math.max(widthU, heightU)) {
 			if (version < 1) {
 				// assumed behavior based on Warcraft III prior to 1.27b
-				throw new IIOException(String.format(
-						"Invalid image dimensions %d*%d pixels.", width, height));
+				throw new IIOException(
+						String.format("Invalid image dimensions %d*%d pixels.",
+								width, height));
 			}
-			final int oldWidth = width;
-			final int oldHeight = height;
-			
+			final long oldWidth = widthU;
+			final long oldHeight = heightU;
+
 			// clamp to maximum dimension
-			width = (int) (Math.min(width & 0xFFFFFFFFL, maxDim));
-			height = (int) (Math.min(height & 0xFFFFFFFFL, maxDim));
-			
+			width = (int) (Math.min(widthU, maxDim));
+			height = (int) (Math.min(heightU, maxDim));
+
 			warning.accept(new LocalizedFormatedString(
-					"com.hiveworkshop.text.blp", "BadDimension", oldWidth, oldHeight, width, height));
-			
+					"com.hiveworkshop.text.blp", "BadDimension", oldWidth,
+					oldHeight, width, height));
 		}
 
 		if (version < 2) {
@@ -514,6 +518,18 @@ public final class BLPStreamMetadata extends IIOMetadata {
 
 			// read hasMipmaps
 			hasMipmaps = src.readInt() != 0;
+		}
+
+		// warn about unusable mipmaps
+		int bigDim = Math.max(width, height);
+		if (version < 2 && LEGACY_MAX_DIMENSION < bigDim) {
+			int i = 0;
+			while (LEGACY_MAX_DIMENSION < bigDim) {
+				i += 1;
+				bigDim >>>= 1;
+			}
+			warning.accept(new LocalizedFormatedString(
+					"com.hiveworkshop.text.blp", "WastefulDimension", i));
 		}
 	}
 
@@ -583,8 +599,8 @@ public final class BLPStreamMetadata extends IIOMetadata {
 		return "{BLP Stream Metadata: Version = " + version + ", width = "
 				+ width + ", height = " + height + ", content = " + contentType
 				+ ", pixmap = " + pixmapType + ", sample = " + sampleType
-				+ ", alpha bits = " + alphaBits + ", mipmaps = " + hasMipmaps + ", extra = " + extra
-				+ "}";
+				+ ", alpha bits = " + alphaBits + ", mipmaps = " + hasMipmaps
+				+ ", extra = " + extra + "}";
 	}
 
 }
