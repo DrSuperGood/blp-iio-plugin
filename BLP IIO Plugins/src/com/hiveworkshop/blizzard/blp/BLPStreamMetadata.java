@@ -493,7 +493,7 @@ public final class BLPStreamMetadata extends IIOMetadata {
 		final int maxDim = getDimensionMaximum();
 		final long widthU = width & 0xFFFFFFFFL;
 		final long heightU = height & 0xFFFFFFFFL;
-		if (Math.min(width, height) < 1 || maxDim < Math.max(widthU, heightU)) {
+		if (maxDim < Math.max(widthU, heightU)) {
 			if (version < 1) {
 				// assumed behavior based on Warcraft III prior to 1.27b
 				throw new IIOException(
