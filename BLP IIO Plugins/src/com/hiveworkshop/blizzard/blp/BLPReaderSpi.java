@@ -12,50 +12,27 @@ import javax.imageio.stream.ImageInputStream;
 
 import com.hiveworkshop.lang.MagicInt;
 
+import static com.hiveworkshop.blizzard.blp.ImageSpiCommon.*;
+
 /**
  * Service provider for BLP texture file ImageReader.
  * 
  * @author Imperial Good
  */
 public class BLPReaderSpi extends ImageReaderSpi {
-
-	// format specification should be moved to a common class when a writer is
-	// implemented
-	// file format specification
-	private static final String vendorName = "Imperial Good";
-	private static final String version = "1.0";
-	private static final String[] names = { "Blizzard Picture", "blp" };
-	private static final String[] suffixes = { "blp" };
-	private static final String[] MIMETypes = { "image/prs.blp" };
-	private static final String readerClassName = "com.hiveworkshop.blizzard.blp.BLPReader";
-	private static final Class<?>[] inputTypes = { ImageInputStream.class, File.class, Path.class };
-	private static final String[] writerSpiNames = null;
-
-	// metadata format specification
-	private static final boolean supportsStandardStreamMetadataFormat = false;
-	private static final String nativeStreamMetadataFormatName = null;
-	private static final String nativeStreamMetadataFormatClassName = null;
-	private static final String[] extraStreamMetadataFormatNames = null;
-	private static final String[] extraStreamMetadataFormatClassNames = null;
-	private static final boolean supportsStandardImageMetadataFormat = false;
-	private static final String nativeImageMetadataFormatName = null;
-	private static final String nativeImageMetadataFormatClassName = null;
-	private static final String[] extraImageMetadataFormatNames = null;
-	private static final String[] extraImageMetadataFormatClassNames = null;
+	static final String READER_CLASS = "com.hiveworkshop.blizzard.blp.BLPReader";
+	static final Class<?>[] INPUT_TYPES = { ImageInputStream.class, File.class,
+			Path.class };
+	static final String[] WRITER_SPI_CLASSES = { "com.hiveworkshop.blizzard.blp.BLPWriterSpi" };
 
 	public BLPReaderSpi() {
-		super(vendorName, version, names, suffixes, MIMETypes, readerClassName,
-				inputTypes, writerSpiNames,
-				supportsStandardStreamMetadataFormat,
-				nativeStreamMetadataFormatName,
-				nativeStreamMetadataFormatClassName,
-				extraStreamMetadataFormatNames,
-				extraStreamMetadataFormatClassNames,
-				supportsStandardImageMetadataFormat,
-				nativeImageMetadataFormatName,
-				nativeImageMetadataFormatClassName,
-				extraImageMetadataFormatNames,
-				extraImageMetadataFormatClassNames);
+		super(VENDOR, VERSION, FORMAT_NAMES, FORMAT_SUFFIXES, FORMAT_MIMES,
+				READER_CLASS, INPUT_TYPES, WRITER_SPI_CLASSES,
+				STANDARD_STREAM_METADATA_SUPPORT, NATIVE_STREAM_METADATA_NAME,
+				NATIVE_STREAM_METADATA_CLASS, EXTRA_STREAM_METADATA_NAME,
+				EXTRA_STREAM_METADATA_CLASS, STANDARD_IMAGE_METADATA_SUPPORT,
+				NATIVE_IMAGE_METADATA_NAME, NATIVE_IMAGE_METADATA_CLASS,
+				EXTRA_IMAGE_METADATA_NAME, EXTRA_IMAGE_METADATA_CLASS);
 	}
 
 	@Override
@@ -68,13 +45,15 @@ public class BLPReaderSpi extends ImageReaderSpi {
 
 			// extract magic number
 			src.setByteOrder(ByteOrder.LITTLE_ENDIAN);
-			MagicInt magic = new MagicInt(src.readInt(), ByteOrder.LITTLE_ENDIAN);
-			
+			MagicInt magic = new MagicInt(src.readInt(),
+					ByteOrder.LITTLE_ENDIAN);
+
 			// rewind stream
 			src.reset();
 
 			// validate magic number
-			if ( BLPCommon.resolveVersion(magic) != -1 ) return true;
+			if (BLPCommon.resolveVersion(magic) != -1)
+				return true;
 		}
 
 		return false;
