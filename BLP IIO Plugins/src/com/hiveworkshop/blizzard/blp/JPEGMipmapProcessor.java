@@ -145,23 +145,23 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 			Consumer<LocalizedFormatedString> handler) throws IOException {
 		// resolve a JPEG ImageWriter
 		ImageWriter jpegWriter = null;
-		// if (param instanceof BLPWriteParam
-		// && ((BLPWriteParam) param).getJPEGSpi() != null) {
-		// // use explicit JPEG reader
-		// jpegReader = ((BLPWriteParam) param).getJPEGSpi()
-		// .createWriterInstance();
-		// } else {
-		// find a JPEG reader
-		Iterator<ImageWriter> jpegWriters = ImageIO
-				.getImageWritersByFormatName("jpeg");
-		while (jpegWriters.hasNext()) {
-			final ImageWriter writer = jpegWriters.next();
-			if (writer.canWriteRasters()) {
-				jpegWriter = writer;
-				break;
+		if (param instanceof BLPWriteParam
+				&& ((BLPWriteParam) param).getJPEGSpi() != null) {
+			// use explicit JPEG reader
+			jpegWriter = ((BLPWriteParam) param).getJPEGSpi()
+					.createWriterInstance();
+		} else {
+			// find a JPEG reader
+			Iterator<ImageWriter> jpegWriters = ImageIO
+					.getImageWritersByFormatName("jpeg");
+			while (jpegWriters.hasNext()) {
+				final ImageWriter writer = jpegWriters.next();
+				if (writer.canWriteRasters()) {
+					jpegWriter = writer;
+					break;
+				}
 			}
 		}
-		// }
 		// validate JPEG writer
 		if (jpegWriter == null)
 			throw new IIOException("No suitable JPEG ImageWriter installed.");
