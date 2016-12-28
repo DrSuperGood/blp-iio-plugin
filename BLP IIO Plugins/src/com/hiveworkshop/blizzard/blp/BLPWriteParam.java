@@ -14,11 +14,12 @@ import javax.imageio.spi.ImageWriterSpi;
  * returned from the ImageWriterSpi must support writing Rasters.
  * <p>
  * Write operations can be specified to automatically generate mipmaps. When
- * specified it is only valid to write a single image to the file at index 0.
- * All required mipmaps, if any, will be automatically generated using an area
- * averaging algorithm. Better mipmap results might be obtain from other
- * algorithms and explicitly specifying the mipmap images. Automatic mipmap
- * generation is specified on by default for ease of use.
+ * specified the given image will be used to automatically fill in all remaining
+ * mipmap levels. All required mipmaps, if any, will be automatically generated
+ * using an area averaging algorithm. Better mipmap results might be obtainable
+ * from other algorithms and explicitly specifying the mipmap images but this is
+ * subject to much scientific theory and debate. Automatic mipmap generation is
+ * specified on by default for ease of use.
  * <p>
  * Write operations can be specified to automatically optimize the full scale
  * image dimensions to the maximum usable dimensions when no StreamMetadata is
@@ -33,6 +34,11 @@ import javax.imageio.spi.ImageWriterSpi;
  * @author Imperial Good
  */
 public class BLPWriteParam extends ImageWriteParam {
+	/**
+	 * Default compression quality.
+	 */
+	public static final float DEFAULT_QUALITY = 0.9f;
+
 	/**
 	 * The JPEG ImageWriterSpi to use to encode JPEG content.
 	 */
@@ -70,6 +76,8 @@ public class BLPWriteParam extends ImageWriteParam {
 
 	public BLPWriteParam() {
 		canWriteCompressed = true;
+		setCompressionMode(MODE_EXPLICIT);
+		setCompressionQuality(DEFAULT_QUALITY);
 	}
 
 	/**
@@ -121,18 +129,17 @@ public class BLPWriteParam extends ImageWriteParam {
 	/**
 	 * Returns if auto mipmap generation is being used.
 	 * 
-	 * @return true if mipmaps will be automatically generated from image 0.
+	 * @return true if mipmaps will be automatically generated as needed.
 	 */
 	public boolean isAutoMipmap() {
 		return autoMipmap;
 	}
 
 	/**
-	 * Set if mipmaps should be automatically generated from a full scale image.
+	 * Set if mipmaps should be automatically generated.
 	 * <p>
-	 * When true mipmaps will be automatically generate from image 0 using an
-	 * area averaging algorithm. Trying to set any other image than 0 is not
-	 * allowed.
+	 * When true, all remaining mipmap levels will be automatically generate as
+	 * from the provided image using an area averaging algorithm.
 	 * 
 	 * @param autoMipmap
 	 *            the automatic mipmap generation setting to use.

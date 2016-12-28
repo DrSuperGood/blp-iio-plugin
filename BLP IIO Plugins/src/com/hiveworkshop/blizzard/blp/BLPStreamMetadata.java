@@ -47,7 +47,7 @@ public final class BLPStreamMetadata extends IIOMetadata {
 	/**
 	 * The maximum dimension size allowed by version 0 and loaded by version 1.
 	 */
-	private static final int LEGACY_MAX_DIMENSION = 512;
+	public static final int LEGACY_MAX_DIMENSION = 512;
 
 	/**
 	 * The BLP Content type.
@@ -58,9 +58,9 @@ public final class BLPStreamMetadata extends IIOMetadata {
 		 */
 		JPEG,
 		/**
-		 * Image data is stored as a map of pixels of varying formats.
+		 * Image data is stored directly as a map of pixels of varying formats.
 		 */
-		PIXMAP
+		DIRECT
 	}
 
 	/**
@@ -193,7 +193,7 @@ public final class BLPStreamMetadata extends IIOMetadata {
 	public BLPStreamMetadata() {
 		version = 1;
 		setEncoding(BLPEncodingType.JPEG, (byte) 0);
-		hasMipmaps = false;
+		hasMipmaps = true;
 		width = 1;
 		height = 1;
 		extra = 6;
@@ -231,7 +231,7 @@ public final class BLPStreamMetadata extends IIOMetadata {
 		// convert configuration to encoding
 		if (contentType == ContentType.JPEG && pixmapType == PixmapType.NONE)
 			return BLPEncodingType.JPEG;
-		else if (contentType == ContentType.PIXMAP
+		else if (contentType == ContentType.DIRECT
 				&& pixmapType == PixmapType.INDEXED)
 			return BLPEncodingType.INDEXED;
 		return BLPEncodingType.UNKNOWN;
@@ -282,7 +282,7 @@ public final class BLPStreamMetadata extends IIOMetadata {
 			sampleType = SampleType.DXT1;
 			break;
 		case INDEXED:
-			contentType = ContentType.PIXMAP;
+			contentType = ContentType.DIRECT;
 			pixmapType = PixmapType.INDEXED;
 			sampleType = SampleType.DXT1;
 			break;
@@ -344,12 +344,36 @@ public final class BLPStreamMetadata extends IIOMetadata {
 	}
 
 	/**
+	 * Scales an image dimension to be for a given mipmap level.
+	 * 
+	 * @param dimension
+	 *            the dimension to scale in pixels.
+	 * @param level
+	 *            the mipmap level.
+	 * @return the mipmap dimension in pixels.
+	 */
+	private static int scaleImageDimension(int dimension, int level) {
+		return Math.max(dimension >>> level, 1);
+	}
+
+	/**
 	 * Get the image width in pixels.
 	 * 
 	 * @return width in pixels.
 	 */
 	public int getWidth() {
 		return width;
+	}
+
+	/**
+	 * Get the image width in pixels for a certain mipmap level.
+	 * 
+	 * @param level
+	 *            mipmap level.
+	 * @return width in pixels.
+	 */
+	public int getWidth(int level) {
+		return scaleImageDimension(width, level);
 	}
 
 	/**
@@ -374,6 +398,17 @@ public final class BLPStreamMetadata extends IIOMetadata {
 	 */
 	public int getHeight() {
 		return height;
+	}
+
+	/**
+	 * Get the image height in pixels for a certain mipmap level.
+	 * 
+	 * @param level
+	 *            mipmap level.
+	 * @return height in pixels.
+	 */
+	public int getHeight(int level) {
+		return scaleImageDimension(height, level);
 	}
 
 	/**

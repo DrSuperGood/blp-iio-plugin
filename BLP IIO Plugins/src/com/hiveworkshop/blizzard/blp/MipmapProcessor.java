@@ -106,9 +106,12 @@ abstract class MipmapProcessor {
 			throws IOException;
 
 	/**
-	 * Determines whether this MipmapProcessor can call
+	 * Determines whether this MipmapProcessor can call decodeMipmap.
+	 * <p>
+	 * If canDecode is true then the object has a writable state and cann call
+	 * decodeMipmap.
 	 * 
-	 * @return
+	 * @return true if calls to decodeMipmap are valid.
 	 */
 	public final boolean canDecode() {
 		return canDecode;

@@ -208,19 +208,6 @@ public class BLPReader extends ImageReader {
 					minIndex, imageIndex));
 	}
 
-	/**
-	 * Scales an image dimension to be for a given mipmap level.
-	 * 
-	 * @param dimension
-	 *            the dimension to scale in pixels.
-	 * @param level
-	 *            the mipmap level.
-	 * @return the mipmap dimension in pixels.
-	 */
-	private static int scaleImageDimension(int dimension, int level) {
-		return Math.max(dimension >>> level, 1);
-	}
-
 	@Override
 	public void setInput(Object input, boolean seekForwardOnly,
 			boolean ignoreMetadata) {
@@ -233,7 +220,7 @@ public class BLPReader extends ImageReader {
 				intSrc.close();
 			} catch (IOException e) {
 				processWarningOccurred(new LocalizedFormatedString(
-						"com.hiveworkshop.text.blp", "IISCloseFail",
+						"com.hiveworkshop.text.blp", "ISCloseFail",
 						e.getMessage()));
 			}
 			intSrc = null;
@@ -270,7 +257,7 @@ public class BLPReader extends ImageReader {
 	public int getHeight(int imageIndex) throws IOException {
 		loadHeader();
 		checkImageIndex(imageIndex);
-		return scaleImageDimension(streamMeta.getHeight(), imageIndex);
+		return streamMeta.getHeight(imageIndex);
 	}
 
 	@Override
@@ -286,8 +273,8 @@ public class BLPReader extends ImageReader {
 		checkImageIndex(imageIndex);
 
 		return mipmapProcessor.getSupportedImageTypes(
-				scaleImageDimension(streamMeta.getWidth(), imageIndex),
-				scaleImageDimension(streamMeta.getHeight(), imageIndex));
+				streamMeta.getWidth(imageIndex),
+				streamMeta.getHeight(imageIndex));
 	}
 
 	@Override
@@ -306,7 +293,7 @@ public class BLPReader extends ImageReader {
 	public int getWidth(int imageIndex) throws IOException {
 		loadHeader();
 		checkImageIndex(imageIndex);
-		return scaleImageDimension(streamMeta.getWidth(), imageIndex);
+		return streamMeta.getWidth(imageIndex);
 	}
 
 	@Override
@@ -330,9 +317,8 @@ public class BLPReader extends ImageReader {
 		byte[] mmData = mipmapReader.getMipmapDataChunk(imageIndex);
 
 		// unpack mipmap image data into a mipmap image
-		final int width = scaleImageDimension(streamMeta.getWidth(), imageIndex);
-		final int height = scaleImageDimension(streamMeta.getHeight(),
-				imageIndex);
+		final int width = streamMeta.getWidth(imageIndex);
+		final int height = streamMeta.getHeight(imageIndex);
 		BufferedImage srcImg = mipmapProcessor.decodeMipmap(mmData, param,
 				width, height, this::processWarningOccurred);
 		// imageIndex);

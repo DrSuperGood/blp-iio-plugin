@@ -204,11 +204,16 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 		// write JPEG file
 		final ImageWriteParam jpegParam = jpegWriter.getDefaultWriteParam();
 		jpegParam.setSourceBands(JPEG_BAND_ARRAY);
+		jpegParam.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+		final String[] compressionTypes = jpegParam.getCompressionTypes();
+		if (compressionTypes != null && compressionTypes.length > 0) {
+			jpegParam.setCompressionType(compressionTypes[0]);
+		}
 		if (param != null && param.canWriteCompressed()
 				&& param.getCompressionMode() == ImageWriteParam.MODE_EXPLICIT) {
-			jpegParam.setCompressionMode(param.getCompressionMode());
-			jpegParam.setCompressionType(param.getCompressionType());
 			jpegParam.setCompressionQuality(param.getCompressionQuality());
+		} else {
+			jpegParam.setCompressionQuality(BLPWriteParam.DEFAULT_QUALITY);
 		}
 		jpegWriter.addIIOWriteWarningListener(new IIOWriteWarningListener() {
 			@Override

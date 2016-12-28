@@ -15,7 +15,7 @@ import com.hiveworkshop.lang.MagicInt;
 import static com.hiveworkshop.blizzard.blp.ImageSpiCommon.*;
 
 /**
- * Service provider for BLP texture file ImageReader.
+ * Service provider for BLP image file ImageReader.
  * 
  * @author Imperial Good
  */
@@ -66,7 +66,7 @@ public class BLPReaderSpi extends ImageReaderSpi {
 
 	@Override
 	public String getDescription(Locale locale) {
-		return "Blizzard Image file image reader.";
+		return "BLP file image reader.";
 	}
 
 }
