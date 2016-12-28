@@ -192,7 +192,7 @@ public class IndexedMipmapProcessor extends MipmapProcessor {
 	}
 
 	@Override
-	public void readObject(ImageInputStream src) throws IOException {
+	public void readObject(ImageInputStream src, Consumer<LocalizedFormatedString> warning) throws IOException {
 		src.setByteOrder(ByteOrder.LITTLE_ENDIAN);
 		int[] cmap = new int[INDEXED_PALETTE_SIZE];
 		src.readFully(cmap, 0, cmap.length);

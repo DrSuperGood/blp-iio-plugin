@@ -169,7 +169,8 @@ abstract class MipmapProcessor {
 	public abstract Iterator<ImageTypeSpecifier> getSupportedImageTypes(
 			int width, int height);
 
-	public abstract void readObject(ImageInputStream src) throws IOException;
+	public abstract void readObject(ImageInputStream src,
+			Consumer<LocalizedFormatedString> warning) throws IOException;
 
 	public abstract void writeObject(ImageOutputStream dst) throws IOException;
 }

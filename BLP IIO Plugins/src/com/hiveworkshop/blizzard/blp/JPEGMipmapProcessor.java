@@ -39,32 +39,42 @@ import javax.imageio.stream.MemoryCacheImageOutputStream;
 import com.hiveworkshop.lang.LocalizedFormatedString;
 
 /**
- * A class that is responsible for processing between mipmap data and JPEG
- * content.
+ * Mipmap processor for JPEG content BLP files.
  * <p>
- * In the case that an encoded JPEG file is not the correct size, it is resized
- * and a warning generated. Resizing occurs on the right and bottom edges of the
- * image. Padding is transparent black.
+ * In the case that a decoded JPEG image is not the correct size, it is resized
+ * and a warning generated. Resizing occurs by padding/cropping the right and
+ * bottom edges of the image. Padding is transparent black.
  * <p>
- * Some poor BLP implementations, such as used by Warcraft III 1.27, do not read
- * and process mipmap data safely so might be able to extract a valid JPEG file
- * from a technically corrupt file.
+ * Some poor BLP implementations, such as used by Warcraft III 1.27a, do not
+ * read and process mipmap data safely so might be able to extract a valid JPEG
+ * file from a technically corrupt file.
  * <p>
  * Both 8 and 0 bit alpha is supported. A fully opaque alpha band is encoded
  * when set to 0 bits. When decoding 0 bit alpha and not using direct read a
  * warning is generated if the alpha channel is not fully opaque. Some poor BLP
- * implementations, such as used by Warcraft III 1.27, can still process the
+ * implementations, such as used by Warcraft III 1.27a, can still process the
  * dummy alpha band which can result in undesirable visual artifacts depending
  * on use.
  * <p>
  * The JPEG ImageReader used can be controlled by a BLPReadParam. Likewise the
- * JPEG ImageWriter used can be controlled by a BLPWriteParam. Due to the use of
- * a shared JPEG header between mipmaps to reduce file size the ImageWriter must
- * be kept constant between all images in a BLP file.
+ * JPEG ImageWriter used can be controlled by a BLPWriteParam. For best encoding
+ * results it is recommended the JPEG ImageWriter be kept constant for all
+ * mipmap levels.
  * 
  * @author Imperial Good
  */
 class JPEGMipmapProcessor extends MipmapProcessor {
+	/**
+	 * The maximum valid shared header length.
+	 * <p>
+	 * Shared headers beyond this size might cause massive image corruption or
+	 * crashes in some readers.
+	 */
+	private static final int MAX_SHARED_HEADER_LENGTH = 0x270;
+
+	/**
+	 * BLP JPEG content band mapping array.
+	 */
 	private static final int[] JPEG_BAND_ARRAY = { 2, 1, 0, 3 };
 
 	/**
@@ -116,7 +126,10 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 				}
 			}
 		}
-		if (mmDataNum > 1 && sharedLength < 256) {
+
+		// process shared header length
+		sharedLength = Math.min(sharedLength, MAX_SHARED_HEADER_LENGTH);
+		if (sharedLength < 64) {
 			handler.accept(new LocalizedFormatedString(
 					"com.hiveworkshop.text.blp", "JPEGSmallShared",
 					sharedLength));
@@ -126,10 +139,9 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 		jpegHeader = Arrays.copyOf(sharedHeader, sharedLength);
 		canDecode = true;
 
+		// process mipmap data
 		if (sharedLength == 0)
 			return mmDataList;
-
-		// process mipmap data
 		List<byte[]> mmDataListOut = new ArrayList<byte[]>(mmDataNum);
 		for (int i = 0; i < mmDataNum; i += 1) {
 			final byte[] mmData = mmDataList.get(i);
@@ -366,11 +378,20 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 	}
 
 	@Override
-	public void readObject(ImageInputStream src) throws IOException {
+	public void readObject(ImageInputStream src,
+			Consumer<LocalizedFormatedString> warning) throws IOException {
 		// read JPEG header
 		src.setByteOrder(ByteOrder.LITTLE_ENDIAN);
-		byte[] jpegh = new byte[src.readInt()];
+		final int length = src.readInt();
+		byte[] jpegh = new byte[length];
 		src.readFully(jpegh, 0, jpegh.length);
+
+		// process length
+		if (length > MAX_SHARED_HEADER_LENGTH) {
+			warning.accept(new LocalizedFormatedString(
+					"com.hiveworkshop.text.blp", "JPEGBigShared", length,
+					MAX_SHARED_HEADER_LENGTH));
+		}
 
 		jpegHeader = jpegh;
 		canDecode = true;

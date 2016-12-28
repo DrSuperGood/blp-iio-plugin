@@ -177,7 +177,7 @@ public class BLPReader extends ImageReader {
 		} else {
 			throw new IIOException("Unsupported content type.");
 		}
-		mipmapProcessor.readObject(src);
+		mipmapProcessor.readObject(src, this::processWarningOccurred);
 
 		// if seeking forward only then header data can now be discarded
 		if (seekForwardOnly)
