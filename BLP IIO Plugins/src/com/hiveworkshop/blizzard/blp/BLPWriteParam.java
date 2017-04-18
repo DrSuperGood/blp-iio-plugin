@@ -36,8 +36,11 @@ import javax.imageio.spi.ImageWriterSpi;
 public class BLPWriteParam extends ImageWriteParam {
 	/**
 	 * Default compression quality.
+	 * <p>
+	 * Suitable for general purpose use in Warcraft III.
 	 */
-	public static final float DEFAULT_QUALITY = 0.9f;
+	public static final float DEFAULT_QUALITY = 0.8f;
+	// most Wc3 JPEG content BLP files are 80% quality
 
 	/**
 	 * The JPEG ImageWriterSpi to use to encode JPEG content.

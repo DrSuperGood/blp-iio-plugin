@@ -72,7 +72,7 @@ public class BLPReadParam extends ImageReadParam {
 	 * <p>
 	 * When direct read mode is enabled, standard ImageReadParam mechanics are
 	 * ignored. This allows ImageReader read operations to return a
-	 * BufferedImage constructed as efficiently as simply as possible.
+	 * BufferedImage constructed as efficiently and simply as possible.
 	 * <p>
 	 * By default direct read is disabled. Using a ImageReadParam that is not of
 	 * type BLPReadParam implies that direct read is disabled. If performance is

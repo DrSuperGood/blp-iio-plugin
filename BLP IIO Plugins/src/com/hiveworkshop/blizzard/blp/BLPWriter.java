@@ -308,6 +308,9 @@ public class BLPWriter extends ImageWriter {
 			}
 			this.streamMetadata.setHeight(destH);
 			this.streamMetadata.setWidth(destW);
+			if (!(param instanceof BLPWriteParam)) {
+				this.streamMetadata.setEncoding(BLPEncodingType.JPEG, srcCM.hasAlpha() ? (byte)8 : (byte)0);
+			}
 
 			// rescale output image if required
 			if (rescaleDest) {
