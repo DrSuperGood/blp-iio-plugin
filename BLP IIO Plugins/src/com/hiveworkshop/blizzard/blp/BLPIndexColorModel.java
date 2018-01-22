@@ -117,30 +117,31 @@ public final class BLPIndexColorModel extends ColorModel {
 	 * from components to a pixel.
 	 */
 	private void populateComponentCache() {
-		// only initalize once, this is expensive
+		// only initialize once, this is expensive
 		if (normalizedComponentCache != null)
 			return;
 
-		int nComponents = indexedColorModel.getNumColorComponents();
-		normalizedComponentCache = new float[colorMap.length * nComponents];
+		final int nColorComponents = indexedColorModel.getNumColorComponents();
+		final int nComponents = indexedColorModel.getNumComponents();
+		normalizedComponentCache = new float[colorMap.length * nColorComponents];
 
-		int[] componentCache = new int[4];
+		int[] componentCacheArray = new int[nComponents];
+		float[] normCacheArray = new float[nComponents];
 		for (int i = 0; i < colorMap.length; i += 1) {
-			int offset = i * nComponents;
-
 			// normalize pixel
 			int pixel = getIndexedColor((byte) i);
 			indexedColorModel.getNormalizedComponents(
-					indexedColorModel.getComponents(pixel, componentCache, 0),
-					0, normalizedComponentCache, offset);
-
+					indexedColorModel.getComponents(pixel, componentCacheArray, 0),
+					0, normCacheArray, 0);
+			
 			// translate color components to sRGB
-			float[] lrgbComponents = Arrays.copyOfRange(
-					normalizedComponentCache, offset, offset + nComponents);
-			float[] srgbComponents = indexedColorModel.getColorSpace().toRGB(
-					lrgbComponents);
+			final float[] srgbComponents = indexedColorModel.getColorSpace().toRGB(
+					normCacheArray);
+			
+			// cache
+			final int offset = i * nColorComponents;
 			System.arraycopy(srgbComponents, 0, normalizedComponentCache,
-					offset, nComponents);
+					offset, nColorComponents);
 		}
 	}
 
