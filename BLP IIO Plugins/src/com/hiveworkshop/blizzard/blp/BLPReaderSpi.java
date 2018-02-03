@@ -38,11 +38,11 @@ public class BLPReaderSpi extends ImageReaderSpi {
 	@Override
 	public boolean canDecodeInput(Object source) throws IOException {
 		if (source instanceof ImageInputStream) {
-			// Can check ImageInputStream.
+			// Record stream state.
 			final ImageInputStream src = (ImageInputStream) source;
-			
-			// Check stream.
 			src.mark();
+			final ByteOrder order = src.getByteOrder();
+			
 			try {
 				// Check magic number.
 				src.setByteOrder(ByteOrder.LITTLE_ENDIAN);
@@ -51,7 +51,8 @@ public class BLPReaderSpi extends ImageReaderSpi {
 				if (BLPCommon.resolveVersion(magic) != -1)
 					return true;
 			} finally {
-				// Always rewind stream.
+				// Restore stream.
+				src.setByteOrder(order);
 				src.reset();
 			}
 
@@ -61,7 +62,7 @@ public class BLPReaderSpi extends ImageReaderSpi {
 	}
 
 	@Override
-	public ImageReader createReaderInstance(Object arg0) throws IOException {
+	public ImageReader createReaderInstance(Object extension) throws IOException {
 		return new BLPReader(this);
 	}
 
