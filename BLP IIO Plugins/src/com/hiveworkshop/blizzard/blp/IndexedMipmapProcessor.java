@@ -1,5 +1,6 @@
 package com.hiveworkshop.blizzard.blp;
 
+import java.awt.color.ColorSpace;
 import java.awt.image.BufferedImage;
 import java.awt.image.ColorModel;
 import java.awt.image.DataBuffer;
@@ -23,25 +24,23 @@ import javax.imageio.stream.ImageOutputStream;
 
 import com.hiveworkshop.lang.LocalizedFormatedString;
 
-import static com.hiveworkshop.blizzard.blp.BLPCommon.INDEXED_PALETTE_SIZE;
-
 /**
  * A class that is responsible for processing between mipmap data and indexed
  * color content.
  * <p>
  * During decoding if the mipmap data is of incorrect size then it is resized to
  * fit and a warning is generated. Some poor BLP implementations, such as used
- * by Warcraft III 1.27, do not read and process mipmap data safely so might be
- * able to extract more meaningful visual information from a technically corrupt
- * file.
+ * by some versions of Warcraft III, do not read and process mipmap data safely
+ * so might be able to extract more meaningful visual information from a
+ * technically corrupt file.
  * <p>
  * When encoding images the first image ColorModel is used to determine the
  * color map used. Both BLPIndexColorModel and IndexColorModel are supported
  * although IndexColorModel alpha is not. The direct values of the required
- * bands are then used without further processing. Alpha banned is always
- * assumed to be the second band and will be rescaled as required. Missing alpha
- * band will be substituted with opaque pixels if required. Any any other bands
- * are discarded.
+ * bands are then used without further processing. Alpha band is always assumed
+ * to be the second band and will be rescaled as required. Missing alpha band
+ * will be substituted with opaque pixels if required. Any other bands are
+ * discarded.
  * 
  * @author Imperial Good
  */
@@ -90,7 +89,7 @@ public class IndexedMipmapProcessor extends MipmapProcessor {
 			if (srcCM instanceof BLPIndexColorModel) {
 				final BLPIndexColorModel blpICM = (BLPIndexColorModel) srcCM;
 				indexedBLPColorModel = new BLPIndexColorModel(
-						blpICM.getColorMap(),
+						blpICM.getPalette(),
 						bandSizes.length > 1 ? bandSizes[1] : 0);
 			} else if (srcCM instanceof IndexColorModel) {
 				// basic IndexColorModel compatibility
@@ -100,7 +99,7 @@ public class IndexedMipmapProcessor extends MipmapProcessor {
 
 				// color space conversion
 				final ColorModel srcCMapCM = ColorModel.getRGBdefault();
-				final ColorModel destCMapCM = BLPIndexColorModel.CMAP_COLORMODEL;
+				final ColorModel destCMapCM = BLPIndexColorModel.createPaletteColorModel(ColorSpace.getInstance(ColorSpace.CS_LINEAR_RGB));
 				final int[] destCMap = new int[srcCMap.length];
 				final int[] components = new int[srcCMapCM
 						.getNumColorComponents()];
@@ -123,8 +122,8 @@ public class IndexedMipmapProcessor extends MipmapProcessor {
 		final SampleModel destSM = new BLPPackedSampleModel(w, h, bandSizes,
 				null);
 		final DataBuffer destDB = destSM.createDataBuffer();
-		final WritableRaster destWR = WritableRaster.createWritableRaster(
-				destSM, destDB, null);
+		final WritableRaster destWR = WritableRaster
+				.createWritableRaster(destSM, destDB, null);
 
 		// copy bands
 		final boolean hasAlpha = bandSizes.length > 1;
@@ -140,8 +139,8 @@ public class IndexedMipmapProcessor extends MipmapProcessor {
 						int alphaSample = srcWR.getSample(x, y, 1);
 						if (rescaleAlpha)
 							alphaSample = (int) ((float) alphaMask
-									* (float) alphaSample / (float) (srcSM
-									.getSampleSize(1) - 1));
+									* (float) alphaSample
+									/ (float) (srcSM.getSampleSize(1) - 1));
 						destWR.setSample(x, y, 1, alphaSample);
 					} else
 						destWR.setSample(x, y, 1, alphaMask);
@@ -164,9 +163,9 @@ public class IndexedMipmapProcessor extends MipmapProcessor {
 		// validate chunk size
 		final int expected = sm.getBufferSize();
 		if (mmData.length != expected) {
-			handler.accept(new LocalizedFormatedString(
-					"com.hiveworkshop.text.blp", "BadBuffer", mmData.length,
-					expected));
+			handler.accept(
+					new LocalizedFormatedString("com.hiveworkshop.text.blp",
+							"BadBuffer", mmData.length, expected));
 			mmData = Arrays.copyOf(mmData, expected);
 		}
 
@@ -184,20 +183,19 @@ public class IndexedMipmapProcessor extends MipmapProcessor {
 	@Override
 	public Iterator<ImageTypeSpecifier> getSupportedImageTypes(int width,
 			int height) {
-		return Arrays
-				.asList(new ImageTypeSpecifier(
-						indexedBLPColorModel,
-						new BLPPackedSampleModel(width, height, bandSizes, null)))
+		return Arrays.asList(new ImageTypeSpecifier(indexedBLPColorModel,
+				new BLPPackedSampleModel(width, height, bandSizes, null)))
 				.iterator();
 	}
 
 	@Override
-	public void readObject(ImageInputStream src, Consumer<LocalizedFormatedString> warning) throws IOException {
+	public void readObject(ImageInputStream src,
+			Consumer<LocalizedFormatedString> warning) throws IOException {
 		src.setByteOrder(ByteOrder.LITTLE_ENDIAN);
-		int[] cmap = new int[INDEXED_PALETTE_SIZE];
-		src.readFully(cmap, 0, cmap.length);
+		final int[] palette = new int[BLPIndexColorModel.MAX_PALETTE_LENGTH];
+		src.readFully(palette, 0, palette.length);
 
-		indexedBLPColorModel = new BLPIndexColorModel(cmap,
+		indexedBLPColorModel = new BLPIndexColorModel(palette,
 				bandSizes.length > 1 ? bandSizes[1] : 0);
 		canDecode = true;
 	}
@@ -205,8 +203,8 @@ public class IndexedMipmapProcessor extends MipmapProcessor {
 	@Override
 	public void writeObject(ImageOutputStream dst) throws IOException {
 		dst.setByteOrder(ByteOrder.LITTLE_ENDIAN);
-		int[] cmap = indexedBLPColorModel.getColorMap();
-		dst.writeInts(cmap, 0, cmap.length);
+		final int[] palette = indexedBLPColorModel.getPalette();
+		dst.writeInts(palette, 0, palette.length);
 	}
 
 }
