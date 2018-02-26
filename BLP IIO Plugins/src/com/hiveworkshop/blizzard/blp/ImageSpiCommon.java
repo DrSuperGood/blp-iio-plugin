@@ -1,16 +1,16 @@
 package com.hiveworkshop.blizzard.blp;
 
 /**
- * Common for blp spis.
+ * Common for BLP ImageIO Spis.
  * <p>
- * Contains all constants in common with the spi classes.
+ * Contains all constants in common with the spi classes to reduce duplication.
  * 
  * @author Imperial Good
  */
 abstract class ImageSpiCommon {
 	// file format specification
 	static final String VENDOR = "Hive Workshop";
-	static final String VERSION = "1.2";
+	static final String VERSION = "2.0";
 	static final String[] FORMAT_NAMES = { "Blizzard Picture", "blp" };
 	static final String[] FORMAT_SUFFIXES = { "blp" };
 	static final String[] FORMAT_MIMES = { "image/hw.blp" };
