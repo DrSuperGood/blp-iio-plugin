@@ -40,8 +40,13 @@ import com.hiveworkshop.lang.LocalizedFormatedString;
  */
 public class BLPReader extends ImageReader {
 	/**
-	 * BLP stream metadata object. Represents the contents of the BLP file
-	 * header and is used to decode all mipmap levels.
+	 * The mipmap index of the full scale image.
+	 */
+	private final int FULL_IMAGE_MIPMAP_INDEX = 0;
+
+	/**
+	 * BLP stream metadata object. Represents the contents of the BLP file header
+	 * and is used to decode all mipmap levels.
 	 */
 	private BLPStreamMetadata streamMeta = null;
 
@@ -55,8 +60,7 @@ public class BLPReader extends ImageReader {
 	 * standard reader interface.
 	 */
 	private static abstract class MipmapReader {
-		public abstract byte[] getMipmapDataChunk(int mipmap)
-				throws IOException;
+		public abstract byte[] getMipmapDataChunk(int mipmap) throws IOException;
 
 		public void flushTo(int mipmap) throws IOException {
 		}
@@ -71,6 +75,12 @@ public class BLPReader extends ImageReader {
 	 * Mipmap processor for content.
 	 */
 	private MipmapProcessor mipmapProcessor = null;
+
+	/**
+	 * Controls if BLP mipmap images are read as directly as possible. The value is
+	 * set when an image is read using the read param.
+	 */
+	private boolean direct = false;
 
 	public String tempGetInfo() throws IOException {
 		loadHeader();
@@ -118,8 +128,7 @@ public class BLPReader extends ImageReader {
 
 			// validate Path
 			if (intSrc == null)
-				throw new IllegalStateException(
-						"Cannot create ImageInputStream from path.");
+				throw new IllegalStateException("Cannot create ImageInputStream from path.");
 			src = intSrc;
 		} else
 			// invalid input has been assigned
@@ -143,8 +152,7 @@ public class BLPReader extends ImageReader {
 			mipmapReader = new MipmapReader() {
 				@Override
 				public byte[] getMipmapDataChunk(int mipmap) throws IOException {
-					return imm.getMipmapDataChunk(src, mipmap,
-							thisref::processWarningOccurred);
+					return imm.getMipmapDataChunk(src, mipmap, thisref::processWarningOccurred);
 				}
 
 				@Override
@@ -164,16 +172,14 @@ public class BLPReader extends ImageReader {
 			};
 		} else {
 			// no path to locate mipmap chunk files
-			throw new IIOException(
-					"BLP0 image can only be loaded from Path or File input.");
+			throw new IIOException("BLP0 image can only be loaded from Path or File input.");
 		}
 
 		// read content header
 		if (streamMeta.getEncodingType() == BLPEncodingType.JPEG) {
 			mipmapProcessor = new JPEGMipmapProcessor(streamMeta.getAlphaBits());
 		} else if (streamMeta.getEncodingType() == BLPEncodingType.INDEXED) {
-			mipmapProcessor = new IndexedMipmapProcessor(
-					streamMeta.getAlphaBits());
+			mipmapProcessor = new IndexedMipmapProcessor(streamMeta.getAlphaBits());
 		} else {
 			throw new IIOException("Unsupported content type.");
 		}
@@ -188,30 +194,36 @@ public class BLPReader extends ImageReader {
 	}
 
 	/**
-	 * Checks if the given image index is valid.
+	 * Checks if the given image index is valid, throwing an exception if not.
 	 * 
 	 * @param imageIndex
-	 *            the image index to check.
+	 *            The image index to check.
 	 * @throws IndexOutOfBoundsException
-	 *             if the image does not exist.
+	 *             If the image does not exist.
 	 */
-	private void checkImageIndex(int imageIndex) {
-		// test if image mipmap level exists
-		if (streamMeta.getMipmapCount() <= imageIndex)
-			throw new IndexOutOfBoundsException(String.format(
-					"Mipmap level does not exist: %d.", imageIndex));
+	private void checkImageIndex(final int imageIndex) {
+		if (imageIndex != 0) {
+			throw new IndexOutOfBoundsException(imageIndex);
+		}
+	}
 
-		// test for seekForwardOnly functionality
-		if (imageIndex < minIndex)
-			throw new IndexOutOfBoundsException(String.format(
-					"Violation of seekForwardOnly: at %d wanting %d.",
-					minIndex, imageIndex));
+	/**
+	 * Checks if the given thumbnail index is valid, throwing an exception if not.
+	 * 
+	 * @param thumbnailIndex
+	 *            The thumbnail index to check.
+	 * @throws IndexOutOfBoundsException
+	 *             If the thumbnail does not exist.
+	 */
+	private void checkThumbnailIndex(final int thumbnailIndex) {
+		if (thumbnailIndex < 0 || (streamMeta.hasMipmaps() ? streamMeta.getMipmapCount() - 1 : 0) <= thumbnailIndex) {
+			throw new IndexOutOfBoundsException(thumbnailIndex);
+		}
 	}
 
 	@Override
-	public void setInput(Object input, boolean seekForwardOnly,
-			boolean ignoreMetadata) {
-		// parent performs type checks and generates exceptions
+	public void setInput(Object input, boolean seekForwardOnly, boolean ignoreMetadata) {
+		// Parent performs type checks and generates exceptions.
 		super.setInput(input, seekForwardOnly, ignoreMetadata);
 
 		// close internal ImageInputStream
@@ -219,9 +231,8 @@ public class BLPReader extends ImageReader {
 			try {
 				intSrc.close();
 			} catch (IOException e) {
-				processWarningOccurred(new LocalizedFormatedString(
-						"com.hiveworkshop.text.blp", "ISCloseFail",
-						e.getMessage()));
+				processWarningOccurred(
+						new LocalizedFormatedString("com.hiveworkshop.text.blp", "ISCloseFail", e.getMessage()));
 			}
 			intSrc = null;
 		}
@@ -231,8 +242,8 @@ public class BLPReader extends ImageReader {
 	}
 
 	/**
-	 * Sends all attached warning listeners a warning message. The messages will
-	 * be localized for each warning listener.
+	 * Sends all attached warning listeners a warning message. The messages will be
+	 * localized for each warning listener.
 	 * 
 	 * @param msg
 	 *            the warning message to send to all warning listeners.
@@ -257,7 +268,7 @@ public class BLPReader extends ImageReader {
 	public int getHeight(int imageIndex) throws IOException {
 		loadHeader();
 		checkImageIndex(imageIndex);
-		return streamMeta.getHeight(imageIndex);
+		return streamMeta.getHeight(FULL_IMAGE_MIPMAP_INDEX);
 	}
 
 	@Override
@@ -267,20 +278,31 @@ public class BLPReader extends ImageReader {
 	}
 
 	@Override
-	public Iterator<ImageTypeSpecifier> getImageTypes(int imageIndex)
-			throws IOException {
+	public Iterator<ImageTypeSpecifier> getImageTypes(int imageIndex) throws IOException {
 		loadHeader();
 		checkImageIndex(imageIndex);
 
-		return mipmapProcessor.getSupportedImageTypes(
-				streamMeta.getWidth(imageIndex),
-				streamMeta.getHeight(imageIndex));
+		return mipmapProcessor.getSupportedImageTypes(1, 1);
 	}
 
 	@Override
-	public int getNumImages(boolean allowSearch) throws IOException {
+	public int getNumImages(final boolean allowSearch) throws IOException {
 		loadHeader();
-		return streamMeta.getMipmapCount();
+		return 1;
+	}
+
+	@Override
+	public int getNumThumbnails(final int imageIndex) throws IOException {
+		loadHeader();
+		checkImageIndex(imageIndex);
+		return streamMeta.hasMipmaps() ? streamMeta.getMipmapCount() - 1 : 0;
+	}
+
+	@Override
+	public boolean hasThumbnails(final int imageIndex) throws IOException {
+		loadHeader();
+		checkImageIndex(imageIndex);
+		return streamMeta.hasMipmaps();
 	}
 
 	@Override
@@ -293,88 +315,132 @@ public class BLPReader extends ImageReader {
 	public int getWidth(int imageIndex) throws IOException {
 		loadHeader();
 		checkImageIndex(imageIndex);
-		return streamMeta.getWidth(imageIndex);
+		return streamMeta.getWidth(FULL_IMAGE_MIPMAP_INDEX);
 	}
 
-	@Override
-	public BufferedImage read(int imageIndex, ImageReadParam param)
-			throws IOException {
-		loadHeader();
-		checkImageIndex(imageIndex);
-
-		// seek forward functionality
-		if (seekForwardOnly && minIndex < imageIndex) {
-			minIndex = imageIndex;
-			mipmapReader.flushTo(minIndex);
+	/**
+	 * Read a mipmap image from the BLP file.
+	 * 
+	 * @param mipmapIndex
+	 *            Mipmap index of image to be read.
+	 * @param param
+	 *            ImageReadParam to use.
+	 * @return Mipmap image.
+	 * @throws IOException
+	 *             If IOException occurs while reading.
+	 */
+	private BufferedImage readMipmap(final int mipmapIndex, ImageReadParam param) throws IOException {
+		if (!mipmapProcessor.canDecode()) {
+			throw new IIOException("Mipmap processor cannot decode.");
 		}
 
-		if (!mipmapProcessor.canDecode())
-			throw new IIOException("Mipmap processor cannot decode.");
+		// Get mipmap image data.
+		byte[] mmData = mipmapReader.getMipmapDataChunk(mipmapIndex);
 
-		processImageStarted(imageIndex);
+		// Unpack mipmap image data into a mipmap image.
+		final int width = streamMeta.getWidth(mipmapIndex);
+		final int height = streamMeta.getHeight(mipmapIndex);
+		BufferedImage srcImg = mipmapProcessor.decodeMipmap(mmData, param, width, height, this::processWarningOccurred);
 
-		// get mipmap image data
-		byte[] mmData = mipmapReader.getMipmapDataChunk(imageIndex);
-
-		// unpack mipmap image data into a mipmap image
-		final int width = streamMeta.getWidth(imageIndex);
-		final int height = streamMeta.getHeight(imageIndex);
-		BufferedImage srcImg = mipmapProcessor.decodeMipmap(mmData, param,
-				width, height, this::processWarningOccurred);
-		// imageIndex);
 		BufferedImage destImg;
-
-		// return src image if direct read mode is specified or no
-		// ImageReadParam is present
-		if (param == null
-				|| (param instanceof BLPReadParam && ((BLPReadParam) param)
-						.isDirectRead()))
+		if (direct) {
+			// Direct read bypasses.
 			destImg = srcImg;
-		else {
-			destImg = getDestination(param, getImageTypes(imageIndex), width,
-					height);
+		} else {
+			// Use image read param.
+			if (param == null) {
+				param = getDefaultReadParam();
+			}
+			destImg = getDestination(param, mipmapProcessor.getSupportedImageTypes(1, 1), srcImg.getWidth(),
+					srcImg.getHeight());
 
-			checkReadParamBandSettings(param, srcImg.getSampleModel()
-					.getNumBands(), destImg.getSampleModel().getNumBands());
+			checkReadParamBandSettings(param, srcImg.getSampleModel().getNumBands(),
+					destImg.getSampleModel().getNumBands());
 
 			Rectangle srcRegion = new Rectangle();
 			Rectangle destRegion = new Rectangle();
-			computeRegions(param, width, height, destImg, srcRegion, destRegion);
+			computeRegions(param, srcImg.getWidth(), srcImg.getHeight(), destImg, srcRegion, destRegion);
 
-			// extract param settings
+			// Extract param settings.
 			int[] srcBands = param.getSourceBands();
 			int[] destBands = param.getDestinationBands();
 			int ssX = param.getSourceXSubsampling();
 			int ssY = param.getSourceYSubsampling();
 
-			WritableRaster srcRaster = srcImg.getRaster().createWritableChild(
-					srcRegion.x, srcRegion.y, srcRegion.width,
+			WritableRaster srcRaster = srcImg.getRaster().createWritableChild(srcRegion.x, srcRegion.y, srcRegion.width,
 					srcRegion.height, 0, 0, srcBands);
-			WritableRaster destRaster = destImg.getRaster()
-					.createWritableChild(destRegion.x, destRegion.y,
-							destRegion.width, destRegion.height, 0, 0,
-							destBands);
+			WritableRaster destRaster = destImg.getRaster().createWritableChild(destRegion.x, destRegion.y,
+					destRegion.width, destRegion.height, 0, 0, destBands);
 
-			// copy pixels
+			// Copy pixels.
 			Object dataElements = null;
 			for (int y = 0; y < destRegion.height; y += 1) {
 				for (int x = 0; x < destRegion.width; x += 1) {
 					final int srcXOff = ssX * x;
 					final int srcYOff = ssY * y;
-					dataElements = srcRaster.getDataElements(srcXOff, srcYOff,
-							null);
+					dataElements = srcRaster.getDataElements(srcXOff, srcYOff, null);
 					destRaster.setDataElements(x, y, dataElements);
 				}
 			}
 		}
 
-		processImageComplete();
 		return destImg;
 	}
 
 	@Override
+	public BufferedImage read(final int imageIndex, ImageReadParam param) throws IOException {
+		loadHeader();
+		checkImageIndex(imageIndex);
+
+		// Seek forward functionality.
+		if (seekForwardOnly) {
+			mipmapReader.flushTo(FULL_IMAGE_MIPMAP_INDEX);
+		}
+
+		processImageStarted(imageIndex);
+
+		direct = param instanceof BLPReadParam && ((BLPReadParam) param).isDirectRead();
+
+		final BufferedImage image = readMipmap(FULL_IMAGE_MIPMAP_INDEX, param);
+
+		processImageComplete();
+		return image;
+	}
+
+	public static int convertThumbnailIndexToMipmapIndex(final int thumbnailIndex) {
+		return 1 + thumbnailIndex;
+	}
+
+	@Override
+	public int getThumbnailHeight(final int imageIndex, final int thumbnailIndex) throws IOException {
+		loadHeader();
+		checkImageIndex(imageIndex);
+		checkThumbnailIndex(thumbnailIndex);
+		return streamMeta.getHeight(convertThumbnailIndexToMipmapIndex(thumbnailIndex));
+	}
+
+	@Override
+	public int getThumbnailWidth(final int imageIndex, final int thumbnailIndex) throws IOException {
+		loadHeader();
+		checkImageIndex(imageIndex);
+		checkThumbnailIndex(thumbnailIndex);
+		return streamMeta.getWidth(convertThumbnailIndexToMipmapIndex(thumbnailIndex));
+	}
+
+	@Override
+	public BufferedImage readThumbnail(final int imageIndex, final int thumbnailIndex) throws IOException {
+		loadHeader();
+		checkImageIndex(imageIndex);
+		processThumbnailStarted(imageIndex, thumbnailIndex);
+
+		final BufferedImage image = readMipmap(convertThumbnailIndexToMipmapIndex(thumbnailIndex), null);
+
+		processThumbnailComplete();
+		return image;
+	}
+
+	@Override
 	public void dispose() {
-		// force cleanup of existing state
 		setInput(null);
 	}
 
