@@ -1,176 +1,280 @@
 package com.hiveworkshop.blizzard.blp;
 
+import java.awt.color.ColorSpace;
 import java.awt.image.BufferedImage;
+import java.awt.image.Raster;
+import java.awt.image.WritableRaster;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
-import java.util.function.Consumer;
 
-import javax.imageio.IIOException;
-import javax.imageio.ImageReadParam;
 import javax.imageio.ImageTypeSpecifier;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
 
-import com.hiveworkshop.lang.LocalizedFormatedString;
-
 /**
- * A class that is responsible for processing between mipmap data and
- * BufferedImage.
+ * A class that is responsible for processing between mipmap data and mipmap
+ * rasters or images.
  * <p>
  * Implementations of this class are responsible for the types of images that
  * can be processed. A single instance is responsible for processing all mipmaps
  * of the same BLP file.
+ * <p>
+ * Mipmap rasters represent the most native form of the mipmap data. For
+ * malformed files this might not always make sense. Instead it is recommended
+ * that the mipmap raster is converted into a mipmap image for easier use.
  * 
  * @author Imperial Good
  */
 abstract class MipmapProcessor {
 	/**
-	 * Set by subclasses when the MipmapProcessor is ready to call decodeMipmap.
+	 * The default color space used to generate mipmap images
+	 * <p>
+	 * Most BLP files are created using sRGB content, even if they are then
+	 * incorrectly processed as linear RGB by graphics APIs.
 	 */
-	protected boolean canDecode = false;
+	private static final ColorSpace DEFAULT_COLOR_SPACE = ColorSpace.getInstance(ColorSpace.CS_sRGB);
 
 	/**
-	 * Determines whether this MipmapProcessor requires encoded mipmaps to be
-	 * post processed.
-	 * <p>
-	 * If true then all encoded mipmap data must be passed through
-	 * postProcessMipmapData once all mipmap levels have been encoded. If false
-	 * then then encoded mipmap data can be further used as is.
-	 * <p>
-	 * Default assumes false.
+	 * Scales an image dimension to be for a given mipmap level.
 	 * 
-	 * @return if postProcessMipmapData must be called once all encoding is
-	 *         complete.
+	 * @param dimension
+	 *            the dimension to scale in pixels.
+	 * @param level
+	 *            the mipmap level.
+	 * @return the mipmap dimension in pixels.
 	 */
-	public boolean mustPostProcess() {
-		return false;
+	private static int scaleImageDimension(final int dimension, final int mipmapIndex) {
+		return Math.max(dimension >>> mipmapIndex, 1);
 	}
 
 	/**
-	 * Post processes encoded mipmap data, allowing it to be decoded.
-	 * <p>
-	 * The order which the mipmap data is provided does not matter. The List
-	 * returned can be the same as the input and the mipmap data might not be
-	 * modified. The ordering of mipmap data in the output List is not changed.
-	 * <p>
-	 * If mustFinalize is true then after calling successfully canDecode will be
-	 * true.
-	 * <p>
-	 * Default returns the input unchanged.
-	 * 
-	 * @param mmDataList
-	 *            unprocessed mipmap data arrays.
-	 * @param handler
-	 *            warning handler.
-	 * @return list of processed mipmap data.
-	 * @throws IllegalArgumentException
-	 *             if encodedmmData does not contain at least 1 element.
+	 * Color space used to generate mipmap images.
 	 */
-	public List<byte[]> postProcessMipmapData(List<byte[]> mmDataList,
-			Consumer<LocalizedFormatedString> handler) {
-		if (mmDataList.size() < 1)
-			throw new IllegalArgumentException("No mipmap data.");
-		return mmDataList;
+	protected ColorSpace decodeColorSpace = DEFAULT_COLOR_SPACE;
+
+	/**
+	 * If true then generated mipmap images might be subjected to per pixel content
+	 * checks.
+	 */
+	protected boolean deepCheck = false;
+
+	/**
+	 * Width of the full scale image.
+	 */
+	private int width = 1;
+
+	/**
+	 * Height of the full scale image.
+	 */
+	private int height = 1;
+
+	/**
+	 * Number of mipmap images to represent the full scale image.
+	 */
+	private int mipmapCount = 1;
+
+	/**
+	 * Warning listener used to accept warning messages.
+	 */
+	protected final WarningListener listener;
+
+	/**
+	 * Construct a mipmap processor with the given warning listener.
+	 * 
+	 * @param listener
+	 *            Warning listener.
+	 */
+	protected MipmapProcessor(final WarningListener listener) {
+		this.listener = listener;
 	}
 
 	/**
-	 * Encodes an image into mipmap data.
+	 * Decodes the given mipmap data into a writable raster.
 	 * <p>
-	 * The input image should use similar SampleModel and ColorModel to those
-	 * returned by getSupportedImageTypes. Other image types might have a best
-	 * effort attempt to encode but there is no guarantee of meaningful success
-	 * or accuracy.
-	 * <p>
-	 * It is assumed the input image is the correct size. No clipping or
-	 * subsampling is performed. Input pixel data is assumed to be in a
-	 * CS_LINEAR_RGB ColorSpace with no automatic ColorSpace conversion.
-	 * Compression quality of the ImageWriteParam may apply and may be lossy.
-	 * <p>
-	 * If mustFinalize is false then after calling successfully canDecode will
-	 * be true.
+	 * The returned writable raster is produced with the minimal processing
+	 * possible. It might be backed by the provided mipmap data array. Not all
+	 * pixels or data elements may be valid. An unused alpha band might be present.
+	 * Blue and red bands likely are swapped. It might have the wrong dimensions for
+	 * the mipmap level.
 	 * 
-	 * @param img
-	 *            input image to encode.
+	 * @param mipmapData
+	 *            Mipmap data array obtained from a mipmap manager.
+	 * @param mipmapIndex
+	 *            Mipmap index number.
+	 * @return A writable raster with mipmap pixels.
+	 * @throws IOException
+	 *             If an exception occurred during decoding.
+	 */
+	public abstract WritableRaster decodeMipmapToRaster(byte[] mipmapData, int mipmapIndex) throws IOException;
+
+	/**
+	 * Converts a list of mipmap rasters into a list mipmap data arrays.
+	 * <p>
+	 * The number of rasters provided must be either 1 or the mipmap count of this
+	 * processor. A value of 1 can be used to process images without mipmaps. The
+	 * order of the raster list must be the same as the order of the mipmaps. All
+	 * mipmap image rasters must be compatible with this processor and must have
+	 * correct mipmap image dimensions.
+	 * <p>
+	 * The image write param is used to control values such as compression quality
+	 * and type used by this processor. All other parts of it will be ignored.
+	 * 
+	 * @param mipmapRasters
+	 *            List of mipmap rasters to encode.
 	 * @param param
-	 *            image write parameter to control encode behavior.
-	 * @param handler
-	 *            warning handler.
-	 * @return encoded mipmap data.
-	 * @throws IIOException
-	 *             if an image cannot be encoded.
+	 *            Parameter used to control encoding quality.
+	 * @return List of mipmap data arrays.
+	 * @throws IOException
+	 *             If an exception occurred during encoding.
 	 */
-	public abstract byte[] encodeMipmap(BufferedImage img,
-			ImageWriteParam param, Consumer<LocalizedFormatedString> handler)
+	public abstract List<byte[]> encodeRastersToMipmaps(List<Raster> mipmapRasters, ImageWriteParam param)
 			throws IOException;
 
 	/**
-	 * Determines whether this MipmapProcessor can call decodeMipmap.
+	 * Converts a mipmap raster into a usable mipmap image.
 	 * <p>
-	 * If canDecode is true then the object has a writable state and cann call
-	 * decodeMipmap.
+	 * The returned buffered image may be backed by the mipmap raster. The image
+	 * will always be the correct dimensions with all pixels valid. The image will
+	 * draw visually correct.
 	 * 
-	 * @return true if calls to decodeMipmap are valid.
+	 * @param mipmapRaster
+	 *            Mipmap raster which pixels are sourced from.
+	 * @param mipmapIndex
+	 *            Mipmap index number.
+	 * @return Prepared mipmap image.
+	 * @throws IOException
+	 *             If an exception occurred while generating the image.
 	 */
-	public final boolean canDecode() {
-		return canDecode;
+	public abstract BufferedImage generateMipmapImage(WritableRaster mipmapRaster, int mipmapIndex) throws IOException;
+
+	/**
+	 * Get the height of the specified mipmap image.
+	 * 
+	 * @param mipmapIndex
+	 *            Mipmap index number.
+	 * @return The height of the mipmap image.
+	 */
+	public int getHeight(final int mipmapIndex) {
+		return scaleImageDimension(height, mipmapIndex);
 	}
 
 	/**
-	 * Decodes mipmap data into an image.
+	 * Get the number of mipmap levels supported by this processor.
 	 * <p>
-	 * The image produced has very strict requirements. It must be exactly the
-	 * dimensions of width and height. It must also be in the format of one of
-	 * the ImageTypeSpecifier advertised by the class. The returned image might
-	 * be backed by the mipmap data array for efficiency, hence the data it
-	 * contains should be considered final after calling.
-	 * <p>
-	 * There is no guarantee that mmData contains exactly the data needed to
-	 * fully produce an image. An attempt should be made to produce an image
-	 * from as much of the data as possible. Missing pixel data must be assigned
-	 * band values of 0.
-	 * <p>
-	 * No clipping or subsampling is performed. Output pixel data is assumed to
-	 * be in a CS_LINEAR_RGB ColorSpace with no automatic ColorSpace conversion.
-	 * <p>
-	 * Calling when canDecode is false results in unspecified behavior, usually
-	 * an exception.
+	 * This is the number of mipmap images one can use this processor for and not
+	 * the number available. If mipmaps are to be used at all is controlled by logic
+	 * higher up.
 	 * 
-	 * @param mmData
-	 *            the mipmap data to decode.
-	 * @param param
-	 *            image read parameter to control decode behavior.
-	 * @param width
-	 *            the width of the decoded image in pixels.
-	 * @param height
-	 *            the height of the decoded image in pixels.
-	 * @param handler
-	 *            warning handler.
-	 * @return the decoded mipmap image.
-	 * @throws IIOException
-	 *             if an image cannot be produced.
+	 * @return Number of mipmap levels this processor supports.
 	 */
-	public abstract BufferedImage decodeMipmap(byte[] mmData,
-			ImageReadParam param, int width, int height,
-			Consumer<LocalizedFormatedString> handler) throws IOException;
+	public int getMipmapCount() {
+		return mipmapCount;
+	}
 
 	/**
-	 * Am iterator of the image types supported by this processor.
+	 * An iterator of the image types supported by this processor.
 	 * <p>
 	 * The types in the iterator can be used to both encode and decode mipmaps.
 	 * 
-	 * @param width
-	 *            the width of the image in pixels.
-	 * @param height
-	 *            the height of the image in pixels.
 	 * @return iterator of supported image types.
 	 */
-	public abstract Iterator<ImageTypeSpecifier> getSupportedImageTypes(
-			int width, int height);
+	public abstract Iterator<ImageTypeSpecifier> getSupportedImageTypes();
 
-	public abstract void readObject(ImageInputStream src,
-			Consumer<LocalizedFormatedString> warning) throws IOException;
+	/**
+	 * Get the width of the specified mipmap image.
+	 * 
+	 * @param mipmapIndex
+	 *            Mipmap index number.
+	 * @return The width of the mipmap image.
+	 */
+	public int getWidth(final int mipmapIndex) {
+		return scaleImageDimension(width, mipmapIndex);
+	}
+
+	/**
+	 * Utility method to check a list of mipmap rasters.
+	 * <p>
+	 * This makes sure that the list has the correct number of rasters and that
+	 * those rasters are the correct sizes.
+	 * 
+	 * @param mipmapRasters
+	 *            List of mipmap rasters.
+	 * @return True if the list is valid, otherwise false.
+	 */
+	protected boolean isMipmapRasterListValid(final List<Raster> mipmapRasters) {
+		// Check count.
+		final var rasterCount = mipmapRasters.size();
+		if (rasterCount != 1 && rasterCount != getMipmapCount()) {
+			return false;
+		}
+
+		// Check dimensions.
+		for (var i = 0; i < rasterCount; i += 1) {
+			final Raster raster = mipmapRasters.get(i);
+			if (raster.getWidth() != getWidth(i) || raster.getHeight() != getHeight(i)) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	public abstract void readObject(ImageInputStream src) throws IOException;
+
+	/**
+	 * Set the color space used to generate mipmap images.
+	 * <p>
+	 * The color space must have 3 components.
+	 * 
+	 * @param colorspace
+	 *            Color space of generated mipmap images, or <code>null</code> to
+	 *            return to default.
+	 */
+	public void setColorSpace(final ColorSpace colorspace) {
+		if (colorspace == null) {
+			decodeColorSpace = DEFAULT_COLOR_SPACE;
+		} else if (colorspace.getNumComponents() != DEFAULT_COLOR_SPACE.getNumComponents()) {
+			throw new IllegalArgumentException("Parameter colorspace has wrong number of components.");
+		} else {
+			decodeColorSpace = colorspace;
+		}
+	}
+
+	/**
+	 * Enable the processor to perform per pixel content checking when generating
+	 * mipmap images.
+	 * <p>
+	 * Performing such checks adds significant overhead and so they are disabled by
+	 * default. The checks will not alter the produced mipmap image in any way, they
+	 * serve only to generate additional warnings if a BLP file is malformed.
+	 * 
+	 * @param enable
+	 *            True if deep checking should be performed.
+	 */
+	public void setDeepChecking(final boolean enable) {
+		deepCheck = enable;
+	}
+
+	/**
+	 * Set the dimensions of the full scale image of this processor.
+	 * 
+	 * @param width
+	 *            Width of the full scale image in pixels.
+	 * @param height
+	 *            Height of the full scale image in pixels.
+	 */
+	public void setDimensions(final int width, final int height) {
+		if (width <= 0 || height <= 0) {
+			throw new IllegalArgumentException("Invalid image dimensions.");
+		}
+
+		this.width = width;
+		this.height = height;
+
+		mipmapCount = Integer.SIZE - Integer.numberOfLeadingZeros(Math.max(width, height));
+	}
 
 	public abstract void writeObject(ImageOutputStream dst) throws IOException;
 }
