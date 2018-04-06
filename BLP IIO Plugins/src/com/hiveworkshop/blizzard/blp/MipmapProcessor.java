@@ -3,7 +3,6 @@ package com.hiveworkshop.blizzard.blp;
 import java.awt.color.ColorSpace;
 import java.awt.image.BufferedImage;
 import java.awt.image.Raster;
-import java.awt.image.WritableRaster;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
@@ -91,6 +90,15 @@ abstract class MipmapProcessor {
 	}
 
 	/**
+	 * Check if the provided raster can be used to generate mipmap data.
+	 * 
+	 * @param rast
+	 *            Raster to check.
+	 * @return True if the raster can be used.
+	 */
+	public abstract boolean canUseRaster(Raster rast);
+
+	/**
 	 * Decodes the given mipmap data into a writable raster.
 	 * <p>
 	 * The returned writable raster is produced with the minimal processing
@@ -107,7 +115,7 @@ abstract class MipmapProcessor {
 	 * @throws IOException
 	 *             If an exception occurred during decoding.
 	 */
-	public abstract WritableRaster decodeMipmapToRaster(byte[] mipmapData, int mipmapIndex) throws IOException;
+	public abstract Raster decodeMipmapToRaster(byte[] mipmapData, int mipmapIndex) throws IOException;
 
 	/**
 	 * Converts a list of mipmap rasters into a list mipmap data arrays.
@@ -147,7 +155,7 @@ abstract class MipmapProcessor {
 	 * @throws IOException
 	 *             If an exception occurred while generating the image.
 	 */
-	public abstract BufferedImage generateMipmapImage(WritableRaster mipmapRaster, int mipmapIndex) throws IOException;
+	public abstract BufferedImage generateMipmapImage(Raster mipmapRaster, int mipmapIndex) throws IOException;
 
 	/**
 	 * Get the height of the specified mipmap image.
@@ -210,10 +218,10 @@ abstract class MipmapProcessor {
 			return false;
 		}
 
-		// Check dimensions.
+		// Check individual rasters.
 		for (var i = 0; i < rasterCount; i += 1) {
 			final Raster raster = mipmapRasters.get(i);
-			if (raster.getWidth() != getWidth(i) || raster.getHeight() != getHeight(i)) {
+			if (raster.getWidth() != getWidth(i) || raster.getHeight() != getHeight(i) || !canUseRaster(raster)) {
 				return false;
 			}
 		}
