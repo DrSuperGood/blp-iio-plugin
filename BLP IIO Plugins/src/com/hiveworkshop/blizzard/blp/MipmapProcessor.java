@@ -229,6 +229,21 @@ abstract class MipmapProcessor {
 		return true;
 	}
 
+	/**
+	 * Prepares a raster to be encoded into mipmap data. This means enforcing the
+	 * use of an appropriately formated data buffer and sample model with the the
+	 * required band count, band sizes and band order.
+	 * <p>
+	 * The returned raster might be a child of the provided raster. No size checks
+	 * are performed, it is assumed that the image raster is already the required
+	 * size.
+	 * 
+	 * @param imageRaster
+	 *            Image raster.
+	 * @return Mipmap raster.
+	 */
+	public abstract Raster prepareRasterToEncode(Raster imageRaster);
+
 	public abstract void readObject(ImageInputStream src) throws IOException;
 
 	/**
