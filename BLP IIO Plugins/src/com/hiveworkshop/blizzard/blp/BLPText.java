@@ -28,4 +28,9 @@ public enum BLPText implements TextEnum {
 	 * Image data buffer for a mipmap image is not the expected size.
 	 */
 	BAD_DATA_BUFFER;
+
+	/**
+	 * Base name for localized resource bundle.
+	 */
+	public static final String BASE_NAME = "com.hiveworkshop.text.blptext";
 }
