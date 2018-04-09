@@ -307,7 +307,7 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 	 * @return Appropriate color model.
 	 */
 	private ColorModel getColorModel() {
-		if (jpegBLPColorModel != null && !jpegBLPColorModel.getColorSpace().equals(decodeColorSpace)) {
+		if (jpegBLPColorModel == null || !jpegBLPColorModel.getColorSpace().equals(decodeColorSpace)) {
 			jpegBLPColorModel = new ComponentColorModel(decodeColorSpace, hasAlpha, false,
 					hasAlpha ? Transparency.TRANSLUCENT : Transparency.OPAQUE, DataBuffer.TYPE_BYTE);
 		}
