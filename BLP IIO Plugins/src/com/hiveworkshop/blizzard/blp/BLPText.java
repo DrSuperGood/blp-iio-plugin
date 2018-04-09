@@ -23,5 +23,9 @@ public enum BLPText implements TextEnum {
 	/**
 	 * JPEG content shared header might be too big to be loaded by some readers.
 	 */
-	BAD_JPEG_HEADER;
+	BAD_JPEG_HEADER,
+	/**
+	 * Image data buffer for a mipmap image is not the expected size.
+	 */
+	BAD_DATA_BUFFER;
 }

@@ -1,28 +1,20 @@
 package com.hiveworkshop.blizzard.blp;
 
-import java.awt.color.ColorSpace;
 import java.awt.image.BufferedImage;
-import java.awt.image.ColorModel;
-import java.awt.image.DataBuffer;
 import java.awt.image.DataBufferByte;
-import java.awt.image.IndexColorModel;
 import java.awt.image.Raster;
-import java.awt.image.SampleModel;
 import java.awt.image.WritableRaster;
 import java.io.IOException;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.function.Consumer;
-
-import javax.imageio.IIOException;
-import javax.imageio.ImageReadParam;
+import java.util.List;
 import javax.imageio.ImageTypeSpecifier;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
-
-import com.hiveworkshop.lang.LocalizedFormatedString;
+import com.hiveworkshop.lang.LocalizedText;
 
 /**
  * A class that is responsible for processing between mipmap data and indexed
@@ -33,27 +25,24 @@ import com.hiveworkshop.lang.LocalizedFormatedString;
  * by some versions of Warcraft III, do not read and process mipmap data safely
  * so might be able to extract more meaningful visual information from a
  * technically corrupt file.
- * <p>
- * When encoding images the first image ColorModel is used to determine the
- * color map used. Both BLPIndexColorModel and IndexColorModel are supported
- * although IndexColorModel alpha is not. The direct values of the required
- * bands are then used without further processing. Alpha band is always assumed
- * to be the second band and will be rescaled as required. Missing alpha band
- * will be substituted with opaque pixels if required. Any other bands are
- * discarded.
  * 
  * @author Imperial Good
  */
 public class IndexedMipmapProcessor extends MipmapProcessor {
 	/**
-	 * The BLP indexed color model used to process mipmaps.
-	 */
-	private BLPIndexColorModel indexedBLPColorModel = null;
-
-	/**
-	 * The bandSizes to use.
+	 * The bad size array used by the sample model..
 	 */
 	private final int[] bandSizes;
+
+	/**
+	 * The color palette array for the color model to use.
+	 */
+	private int[] palette;
+
+	/**
+	 * The alpha band precision to use.
+	 */
+	private final int alphaBits;
 
 	/**
 	 * Constructs a MipmapProcessor for indexed color content.
@@ -63,147 +52,187 @@ public class IndexedMipmapProcessor extends MipmapProcessor {
 	 * @throws IllegalArgumentException
 	 *             if alphaBits is not valid.
 	 */
-	public IndexedMipmapProcessor(int alphaBits) {
+	public IndexedMipmapProcessor(final int alphaBits, final WarningListener listener) {
+		super(listener);
 		if (!BLPEncodingType.INDEXED.isAlphaBitsValid(alphaBits))
 			throw new IllegalArgumentException("Unsupported alphaBits.");
-		bandSizes = alphaBits != 0 ? new int[] { 8, alphaBits }
-				: new int[] { 8 };
-
-		// dummy color model
-		indexedBLPColorModel = new BLPIndexColorModel(null,
-				bandSizes.length > 1 ? bandSizes[1] : 0);
+		this.alphaBits = alphaBits;
+		bandSizes = alphaBits != 0 ? new int[] { BLPIndexColorModel.PALETTE_INDEX_BITS, alphaBits }
+				: new int[] { BLPIndexColorModel.PALETTE_INDEX_BITS };
 	}
 
 	@Override
-	public byte[] encodeMipmap(BufferedImage img, ImageWriteParam param,
-			Consumer<LocalizedFormatedString> handler) throws IOException {
-		final WritableRaster srcWR = img.getRaster();
-		final ColorModel srcCM = img.getColorModel();
-		final SampleModel srcSM = srcWR.getSampleModel();
-		final int h = srcSM.getHeight();
-		final int w = srcSM.getWidth();
-
-		// process ColorModel
-		if (!canDecode) {
-			// get a color model
-			if (srcCM instanceof BLPIndexColorModel) {
-				final BLPIndexColorModel blpICM = (BLPIndexColorModel) srcCM;
-				indexedBLPColorModel = new BLPIndexColorModel(
-						blpICM.getPalette(),
-						bandSizes.length > 1 ? bandSizes[1] : 0);
-			} else if (srcCM instanceof IndexColorModel) {
-				// basic IndexColorModel compatibility
-				final IndexColorModel iCM = (IndexColorModel) srcCM;
-				final int[] srcCMap = new int[iCM.getMapSize()];
-				iCM.getRGBs(srcCMap);
-
-				// color space conversion
-				final ColorModel srcCMapCM = ColorModel.getRGBdefault();
-				final ColorModel destCMapCM = BLPIndexColorModel.createPaletteColorModel(ColorSpace.getInstance(ColorSpace.CS_LINEAR_RGB));
-				final int[] destCMap = new int[srcCMap.length];
-				final int[] components = new int[srcCMapCM
-						.getNumColorComponents()];
-				for (int i = 0; i < srcCMap.length; i += 1) {
-					destCMap[i] = destCMapCM.getDataElement(
-							srcCMapCM.getComponents(srcCMap[i], components, 0),
-							0);
-				}
-
-				indexedBLPColorModel = new BLPIndexColorModel(destCMap,
-						bandSizes.length > 1 ? bandSizes[1] : 0);
-			} else {
-				throw new IIOException(
-						"Cannot obtain sensible color map from ColorModel.");
-			}
-			canDecode = true;
-		}
-
-		// create destination
-		final SampleModel destSM = new BLPPackedSampleModel(w, h, bandSizes,
-				null);
-		final DataBuffer destDB = destSM.createDataBuffer();
-		final WritableRaster destWR = WritableRaster
-				.createWritableRaster(destSM, destDB, null);
-
-		// copy bands
-		final boolean hasAlpha = bandSizes.length > 1;
-		final boolean srcHasAlpha = hasAlpha && srcSM.getNumBands() > 1;
-		final boolean rescaleAlpha = srcHasAlpha
-				&& srcSM.getSampleSize(1) != bandSizes[1];
-		final int alphaMask = hasAlpha ? (1 << bandSizes[1]) - 1 : 0;
-		for (int y = 0; y < h; y += 1) {
-			for (int x = 0; x < w; x += 1) {
-				destWR.setSample(x, y, 0, srcWR.getSample(x, y, 0));
-				if (hasAlpha) {
-					if (srcHasAlpha) {
-						int alphaSample = srcWR.getSample(x, y, 1);
-						if (rescaleAlpha)
-							alphaSample = (int) ((float) alphaMask
-									* (float) alphaSample
-									/ (float) (srcSM.getSampleSize(1) - 1));
-						destWR.setSample(x, y, 1, alphaSample);
-					} else
-						destWR.setSample(x, y, 1, alphaMask);
-				}
-			}
-		}
-
-		// return destination results
-		return ((DataBufferByte) srcWR.getDataBuffer()).getData();
+	public boolean canUseRaster(final Raster raster) {
+		final var sampleModel = raster.getSampleModel();
+		final var sampleSizes = sampleModel.getSampleSize();
+		return (sampleModel instanceof BLPPackedSampleModel) && Arrays.equals(sampleSizes, bandSizes);
 	}
 
 	@Override
-	public BufferedImage decodeMipmap(byte[] mmData, ImageReadParam param,
-			int width, int height, Consumer<LocalizedFormatedString> handler)
+	public Raster decodeMipmapToRaster(final byte[] mipmapData, final int mipmapIndex) throws IOException {
+		// Produce image WritableRaster
+		final var width = getWidth(mipmapIndex);
+		final var height = getHeight(mipmapIndex);
+		final var sampleModel = new BLPPackedSampleModel(width, height, bandSizes, null);
+		final var dataBuffer = new DataBufferByte(mipmapData, mipmapData.length);
+		final var writableRaster = Raster.createWritableRaster(sampleModel, dataBuffer, null);
+
+		return writableRaster;
+	}
+
+	@Override
+	public List<byte[]> encodeRastersToMipmaps(final List<Raster> mipmapRasters, final ImageWriteParam param)
 			throws IOException {
-		// create sample model
-		final BLPPackedSampleModel sm = new BLPPackedSampleModel(width, height,
-				bandSizes, null);
-
-		// validate chunk size
-		final int expected = sm.getBufferSize();
-		if (mmData.length != expected) {
-			handler.accept(
-					new LocalizedFormatedString("com.hiveworkshop.text.blp",
-							"BadBuffer", mmData.length, expected));
-			mmData = Arrays.copyOf(mmData, expected);
+		if (!isMipmapRasterListValid(mipmapRasters)) {
+			throw new IllegalArgumentException("Invalid mipmap rasters list.");
 		}
 
-		// produce image WritableRaster
-		final DataBuffer db = new DataBufferByte(mmData, mmData.length);
-		final WritableRaster raster = Raster.createWritableRaster(sm, db, null);
+		// Encode all mipmap rasters into mipmap data.
+		final var mipmapDataList = new ArrayList<byte[]>(mipmapRasters.size());
+		for (final var mipmapRaster : mipmapRasters) {
+			final var dataBuffer = (DataBufferByte) mipmapRaster.getDataBuffer();
+			final var mipmapData = dataBuffer.getData().clone();
+			mipmapDataList.add(mipmapData);
+		}
 
-		// produce buffered image
-		BufferedImage img = new BufferedImage(indexedBLPColorModel, raster,
-				false, null);
-
-		return img;
+		return mipmapDataList;
 	}
 
 	@Override
-	public Iterator<ImageTypeSpecifier> getSupportedImageTypes(int width,
-			int height) {
-		return Arrays.asList(new ImageTypeSpecifier(indexedBLPColorModel,
-				new BLPPackedSampleModel(width, height, bandSizes, null)))
-				.iterator();
+	public BufferedImage generateMipmapImage(final Raster mipmapRaster, final int mipmapIndex) throws IOException {
+		if (palette == null) {
+			throw new IllegalStateException("Cannot generate mipmap image as no palette has been loaded.");
+		}
+
+		final var sampleModel = (BLPPackedSampleModel) mipmapRaster.getSampleModel();
+		final var dataBuffer = (DataBufferByte) mipmapRaster.getDataBuffer();
+		final var dataBufferSize = dataBuffer.getSize();
+		final var expectedDataBufferSize = sampleModel.getBufferSize();
+
+		// Sample model is always correct, but the data buffer size might not be.
+		final var malformedRaster = dataBufferSize != expectedDataBufferSize;
+		if (malformedRaster) {
+			listener.sendWarning(
+					new LocalizedText<BLPText>(BLPText.BAD_DATA_BUFFER, dataBufferSize, expectedDataBufferSize));
+		}
+
+		final WritableRaster backingWritableRaster;
+		if (!(mipmapRaster instanceof WritableRaster) || malformedRaster) {
+			// Generate a new writable raster and copy as much as possible.
+			final var backingDataArray = Arrays.copyOf(dataBuffer.getData(), expectedDataBufferSize);
+			final var backingDataBuffer = new DataBufferByte(backingDataArray, backingDataArray.length);
+			backingWritableRaster = Raster.createWritableRaster(sampleModel, backingDataBuffer, null);
+		} else {
+			backingWritableRaster = (WritableRaster) mipmapRaster;
+		}
+
+		// Produce mipmap image.
+		final var mipmapImage = new BufferedImage(getColorModel(), backingWritableRaster, false, null);
+
+		return mipmapImage;
+	}
+
+	/**
+	 * Get the color model used to decode or encode images with this processor.
+	 * 
+	 * @return The processor color model.
+	 */
+	private BLPIndexColorModel getColorModel() {
+		final var colorModel = new BLPIndexColorModel(palette, alphaBits, decodeColorSpace);
+
+		return colorModel;
 	}
 
 	@Override
-	public void readObject(ImageInputStream src,
-			Consumer<LocalizedFormatedString> warning) throws IOException {
+	public Iterator<ImageTypeSpecifier> getSupportedImageTypes() {
+		final var colorModel = getColorModel();
+		final var sampleModel = new BLPPackedSampleModel(1, 1, bandSizes, null);
+		final var imageTypeSpecifier = new ImageTypeSpecifier(colorModel, sampleModel);
+		return List.of(imageTypeSpecifier).iterator();
+	}
+
+	@Override
+	public Raster prepareRasterToEncode(final Raster imageRaster) {
+		final var sampleModel = imageRaster.getSampleModel();
+
+		final Raster mipmapRaster;
+		if (!(sampleModel instanceof BLPPackedSampleModel) || !Arrays.equals(sampleModel.getSampleSize(), bandSizes)) {
+			// Build new raster, re-scaling samples as required.
+			final var width = imageRaster.getWidth();
+			final var height = imageRaster.getHeight();
+			final var backingSampleModel = new BLPPackedSampleModel(width, height, bandSizes, null);
+			final var backingDataBuffer = backingSampleModel.createDataBuffer();
+			final var backingWritableRaster = Raster.createWritableRaster(backingSampleModel, backingDataBuffer, null);
+
+			final var minBandCount = Math.min(sampleModel.getNumBands(), backingSampleModel.getNumBands());
+			for (var band = 0; band < minBandCount; band += 1) {
+				final var sampleSize = sampleModel.getSampleSize(band);
+				final var backingSampleSize = backingSampleModel.getSampleSize(band);
+				final double unity = (1 << sampleSize) - 1;
+				final double backingUnity = (1 << backingSampleSize) - 1;
+				for (var x = 0; x < width; x += 1) {
+					for (var y = 0; y < height; y += 1) {
+						final var sample = imageRaster.getSample(x, y, band);
+
+						final int backingSample;
+						if (sampleSize != backingSampleSize) {
+							final var normalSample = sample / unity;
+							backingSample = (int) (normalSample * backingUnity);
+						} else {
+							backingSample = sample;
+						}
+
+						backingWritableRaster.setSample(x, y, band, backingSample);
+					}
+				}
+			}
+
+			mipmapRaster = backingWritableRaster;
+		} else {
+			mipmapRaster = imageRaster;
+		}
+
+		return mipmapRaster;
+	}
+
+	@Override
+	public void readObject(final ImageInputStream src) throws IOException {
 		src.setByteOrder(ByteOrder.LITTLE_ENDIAN);
-		final int[] palette = new int[BLPIndexColorModel.MAX_PALETTE_LENGTH];
+		final var palette = new int[BLPIndexColorModel.MAX_PALETTE_LENGTH];
 		src.readFully(palette, 0, palette.length);
 
-		indexedBLPColorModel = new BLPIndexColorModel(palette,
-				bandSizes.length > 1 ? bandSizes[1] : 0);
-		canDecode = true;
+		this.palette = palette;
+	}
+
+	/**
+	 * Set the palette used to decode mipmap images.
+	 * <p>
+	 * The palette must contain at most
+	 * <code>BLPIndexColorModel.MAX_PALETTE_LENGTH</code> elements. These elements
+	 * represent colors using a color model generated by
+	 * <code>BLPIndexColorModel.createPaletteColorModel(colorSpace)</code>.
+	 * 
+	 * @param palette
+	 *            Palette array to use.
+	 */
+	public void setPalette(final int[] palette) {
+		if (palette != null) {
+			if (palette.length > BLPIndexColorModel.MAX_PALETTE_LENGTH) {
+				throw new IllegalArgumentException("Trying to set a palette larger than MAX_PALETTE_LENGTH.");
+			}
+			this.palette = Arrays.copyOf(palette, BLPIndexColorModel.MAX_PALETTE_LENGTH);
+		} else {
+			this.palette = null;
+		}
 	}
 
 	@Override
-	public void writeObject(ImageOutputStream dst) throws IOException {
+	public void writeObject(final ImageOutputStream dst) throws IOException {
+		if (palette == null) {
+			throw new IllegalStateException("Cannot write indexed mipmap processor as no palette has been loaded.");
+		}
+
 		dst.setByteOrder(ByteOrder.LITTLE_ENDIAN);
-		final int[] palette = indexedBLPColorModel.getPalette();
 		dst.writeInts(palette, 0, palette.length);
 	}
 
