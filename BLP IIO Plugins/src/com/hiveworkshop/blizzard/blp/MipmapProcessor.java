@@ -57,7 +57,7 @@ abstract class MipmapProcessor {
 	 * If true then generated mipmap images might be subjected to per pixel content
 	 * checks.
 	 */
-	protected boolean deepCheck = false;
+	protected boolean deepCheck = true;
 
 	/**
 	 * Width of the full scale image.
@@ -145,7 +145,8 @@ abstract class MipmapProcessor {
 	 * <p>
 	 * The returned buffered image may be backed by the mipmap raster. The image
 	 * will always be the correct dimensions with all pixels valid. The image will
-	 * draw visually correct.
+	 * draw visually correct. The backing data buffer may only be correct if deep
+	 * check is enabled.
 	 * 
 	 * @param mipmapRaster
 	 *            Mipmap raster which pixels are sourced from.
@@ -269,9 +270,10 @@ abstract class MipmapProcessor {
 	 * Enable the processor to perform per pixel content checking when generating
 	 * mipmap images.
 	 * <p>
-	 * Performing such checks adds significant overhead and so they are disabled by
-	 * default. The checks will not alter the produced mipmap image in any way, they
-	 * serve only to generate additional warnings if a BLP file is malformed.
+	 * Performing such checks adds significant overhead but may be required to warn
+	 * of and prevent some malformed samples in underlying data buffers. Even with
+	 * deep checking turned off, returned images will appear correct within the
+	 * standard Java API.
 	 * 
 	 * @param enable
 	 *            True if deep checking should be performed.
