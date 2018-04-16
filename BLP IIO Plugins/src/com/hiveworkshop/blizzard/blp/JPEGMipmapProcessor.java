@@ -278,6 +278,7 @@ class JPEGMipmapProcessor extends MipmapProcessor {
 			for (var x = 0; x < width; x += 1) {
 				for (var y = 0; y < height; y += 1) {
 					if (backingWritableRaster.getSample(x, y, alphaBand) != OPAQUE_SAMPLE) {
+						backingWritableRaster.setSample(x, y, alphaBand, OPAQUE_SAMPLE);
 						transparentCount += 1;
 					}
 				}
